@@ -1,0 +1,9 @@
+numpy
+odfpy
+openpyxl
+pandas
+soup_files>=1.4
+scipy
+convert_stream
+
+
