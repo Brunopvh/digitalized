@@ -3,8 +3,9 @@ from io import BytesIO
 from abc import ABC, abstractmethod
 from openpyxl import load_workbook, Workbook
 from collections.abc import Iterator
-from pandas import DataFrame
+import pandas as pd
 from documents.erros import *
+from typing import Any
 
 class RowIterator(Iterator):
 
@@ -50,14 +51,32 @@ class SheetIndexNames(dict[int, str]):
     def values(self) -> list[str]:
         return list(super().values())
 
+    def add_index(self, idx: int, name: str):
+        self[idx] = name
+
     def get_index_from_name(self, sheet_name: str) -> int | None:
+        """
+        Retorna o indíce de uma planilha a partir do nome.
+        :param sheet_name: string nome da planilha
+        :return: int indíce de uma planilha
+        """
         for idx in self.keys():
             if self[idx] == sheet_name:
                 return idx
         return None
 
+    def get_sheet_name_at(self, idx: int) -> str:
+        return self[idx]
+
     def get_sheet_names(self) -> list[str]:
         return self.values()
+
+    @classmethod
+    def create_from_list(cls, sheet_names: list[str]):
+        sheet_idx = cls()
+        for n, name in enumerate(sheet_names):
+            sheet_idx.add_index(n, name)
+        return sheet_idx
 
 
 class SheetData(dict[str, list[str]]):
@@ -92,20 +111,31 @@ class SheetData(dict[str, list[str]]):
     def values(self) -> list[list[str]]:
         return list(super().values())
 
+    def add_column(self, head: str, column: list[str]):
+        self[head] = column
+
     def get_max_rows(self) -> int:
         _keys = self.keys()
         _name = _keys[0]
         return len(self[_name])
 
-    def to_data_frame(self) -> DataFrame:
-        return DataFrame(self)
+    def to_data_frame(self) -> pd.DataFrame:
+        return pd.DataFrame(self)
+
+    @classmethod
+    def create_from_data(cls, data: pd.DataFrame) -> SheetData:
+        columns: list[str] = data.astype('str').columns.to_list()
+        sheet_data = cls()
+        for col in columns:
+            sheet_data.add_column(col, data[col].astype('str').values.tolist())
+        return sheet_data
 
 
 class WorkbookData(dict[str, SheetData]):
 
     def __init__(self):
         super().__init__({})
-        self.__sheet_index_names: SheetIndexNames = None
+        self.__sheet_index_names: SheetIndexNames | None = None
 
     def get_sheet_index_names(self) -> SheetIndexNames:
         """
@@ -113,17 +143,35 @@ class WorkbookData(dict[str, SheetData]):
         :return: Dicionário com int, str
         """
         if self.__sheet_index_names is None:
-            raise UndefinedSheetIndex()
+            self.__sheet_index_names = SheetIndexNames()
+            for n, name in enumerate(self.keys()):
+                self.__sheet_index_names.add_index(n, name)
         return self.__sheet_index_names
 
     def set_sheet_index_names(self, sheet_index_names: SheetIndexNames):
         self.__sheet_index_names = sheet_index_names
+
+    def get_first(self) -> SheetData:
+        return self.get_sheet_at(0)
+
+    def get_last(self) -> SheetData:
+        _keys = self.keys()
+        _last_key = _keys[-1]
+        return self[_last_key]
+
+    def get_sheet_at(self, idx: int) -> SheetData:
+        _keys = self.keys()
+        return self[_keys[idx]]
 
     def keys(self) -> list[str]:
         return list(super().keys())
 
     def values(self) -> list[SheetData]:
         return list(super().values())
+
+    def add_sheet(self, name: str, sheet: SheetData):
+        self[name] = sheet
+
 
 
 class ExcelLoad(ABC):
@@ -137,8 +185,8 @@ class ExcelLoad(ABC):
         pass
 
     def get_sheet_at(self, idx: int) -> SheetData:
-        idx_workbook: SheetIndexNames = self.get_sheet_index()
-        name = idx_workbook[idx]
+        idx_sheet_names: SheetIndexNames = self.get_sheet_index()
+        name = idx_sheet_names[idx]
         return self.get_workbook_data()[name]
 
     def get_sheet(self, sheet_name: str | None) -> SheetData:
@@ -152,26 +200,26 @@ class ExcelLoadOpenPyxl(ExcelLoad):
     def __init__(self, file_excel: str | BytesIO):
         super().__init__()
         self.file_excel: str | BytesIO = file_excel
-        self.__workbook: Workbook = None
+        self.__workbook: Workbook | None = None
 
     def __get_wb(self) -> Workbook:
         if self.__workbook is None:
-            self.__workbook = load_workbook(self.file_excel)
+            try:
+                self.__workbook = load_workbook(self.file_excel)
+            except FileNotFoundError:
+                raise LoadWorkbookError(f'{__class__.__name__} FileNotFoundError()')
+            except Exception as e:
+                raise LoadWorkbookError(f'{__class__.__name__} {e}')
         return self.__workbook
 
     def __get_sheet_data_from_name(self, name: str) -> SheetData:
         sheet_data = SheetData()
-        wb = self.__get_wb()
-        # Assumindo que você quer ler a planilha apenas para obter os dados,
-        # o modo ReadOnly é eficiente, mas ReadOnlyWorksheet não tem o
-        # atributo .rows direto em algumas versões.
-        # Vamos usar a planilha normal para garantir compatibilidade.
+        wb: Workbook = self.__get_wb()
         ws = wb[name]  # Acessa a planilha pelo nome
-
-        # 1. Pega o iterador de linhas
+        # Iterador de linhas
         rows_iterator = ws.rows
 
-        # 2. Extrai e processa o cabeçalho (primeira linha)
+        # Extrai e processa o cabeçalho (primeira linha)
         try:
             # O 'next' avança o iterador para a segunda linha após esta chamada
             header_cells = next(rows_iterator)
@@ -206,21 +254,51 @@ class ExcelLoadOpenPyxl(ExcelLoad):
         return sheet_data
 
     def get_sheet_index(self) -> SheetIndexNames:
+        """
+
+        :return: Dicionário dict/SheetIndexNames sendo as chaves os indíces (int) de
+        cada planilha e os valores (str) os respectivos nomes.
+        """
         wb = self.__get_wb()
         sheet_index = SheetIndexNames()
-        names = wb.sheetnames
+        names: list[str] = wb.sheetnames
         for num, name in enumerate(names):
-            sheet_index[num] = name
+            #sheet_index[num] = name
+            sheet_index.add_index(num, name)
         return sheet_index
 
     def get_workbook_data(self) -> WorkbookData:
         final = WorkbookData()
         sheet_index = self.get_sheet_index()
-        final.set_sheet_index_names(sheet_index)
         for sheet_name in sheet_index.get_sheet_names():
             sheet_data = self.__get_sheet_data_from_name(sheet_name)
-            final[sheet_name] = sheet_data
+            final.add_sheet(sheet_name, sheet_data)
         return final
+
+
+class ExcelLoadPandas(ExcelLoad):
+
+    def __init__(self, xlsx_file):
+        self.xlsx_file: str | BytesIO = xlsx_file
+
+    def get_sheet_index(self) -> SheetIndexNames:
+        rd: pd.ExcelFile = pd.ExcelFile(self.xlsx_file)
+        names = [str(x) for x in rd.sheet_names]
+        return SheetIndexNames.create_from_list(names)
+
+    def get_workbook_data(self) -> WorkbookData:
+        data: dict[Any, pd.DataFrame] = pd.read_excel(self.xlsx_file, sheet_name=None)
+        workbook_data = WorkbookData()
+        for _key in data.keys():
+            df: pd.DataFrame = data[_key]
+            workbook_data.add_sheet(str(_key), SheetData.create_from_data(df))
+        return workbook_data
+
+    def get_sheet_at(self, idx: int) -> SheetData:
+        return super().get_sheet_at(idx)
+
+    def get_sheet(self, sheet_name: str | None) -> SheetData:
+        return super().get_sheet(sheet_name)
 
 
 class ReadSheetExcel(object):
@@ -243,4 +321,9 @@ class ReadSheetExcel(object):
     @classmethod
     def create_load_open_pyxl(cls, file_excel: str | BytesIO) -> ReadSheetExcel:
         rd = ExcelLoadOpenPyxl(file_excel)
+        return cls(rd)
+
+    @classmethod
+    def create_load_pandas(cls, file_excel: str | BytesIO) -> ReadSheetExcel:
+        rd = ExcelLoadPandas(file_excel)
         return cls(rd)
