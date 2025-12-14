@@ -1,9 +1,6 @@
 #!/usr/bin/env python3
 import sys
 import os
-import pandas as pd
-import soup_files as sp
-from sheet_stream import *
 
 TEST_FILE = os.path.abspath(__file__)
 ROOT_DIR = os.path.dirname(TEST_FILE)
@@ -13,16 +10,15 @@ MODULES_DIR = os.path.join(ROOT_DIR, 'sheet_stream')
 sys.path.insert(0, MODULES_DIR)
 
 f = '/home/brunoc/Documentos/LV10.xlsx'
+ods = '/home/brunoc/Documentos/LV10.ods'
 
 
 def test():
-    from documents.sheet.excel.load import ReadSheetExcel, SheetData, RowIterator
-    from pathlib import Path
-    from io import BytesIO
+    from digitalized.documents.sheet.excel.load import ReadSheetExcel
+    from digitalized.documents.sheet.ods import ReadSheetODS
 
-    ld = ReadSheetExcel.create_load_pandas(f)
-    #ld = ReadSheetExcel.create_load_open_pyxl(f)
-    print(ld.get_workbook_data().get_last().header())
+    ld = ReadSheetODS.create_load_pandas(ods)
+    print(ld.get_workbook_data().get_last())
 
 
 def main():
