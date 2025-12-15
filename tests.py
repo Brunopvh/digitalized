@@ -9,17 +9,23 @@ MODULES_DIR = os.path.join(ROOT_DIR, 'sheet_stream')
 
 sys.path.insert(0, MODULES_DIR)
 
-ods = '/home/bruno/Documentos/BASE.ods'
+ods = '/home/brunoc/Documentos/LV10.ods'
 out = '/home/bruno/Documentos/teste.ods'
+output_dir = '/home/brunoc/Downloads/output'
+
+from digitalized.documents.sheet import ReadSheetExcel, ReadSheetODS
+from digitalized.documents.sheet.parse import SplitDataFrame, ParserData
 
 
 def test():
-    from digitalized.documents.sheet.excel.load import ReadSheetExcel
-    from digitalized.documents.sheet.ods import ReadSheetODS
 
-    ld = ReadSheetODS.create_load_odfpy(ods)
-    ld.get_workbook_data().get_last().to_data_frame().to_excel(out)
+    ld = ReadSheetODS.create_load_pandas(ods)
+    df = ld.get_workbook_data().get_sheet('Sheet1')
+    parse = ParserData(df.to_data_frame())
+    parse.concat_columns(['numliv', 'codlcd', 'numrota'])
 
+    split_df = SplitDataFrame(parse.get_data(), col_split='concatenar')
+    split_df.split_to_disk(output_dir, extension='ods')
 
 
 def main():

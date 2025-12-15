@@ -445,3 +445,6 @@ class ReadSheetExcel(object):
         """Cria uma instância usando o carregador XML (do zero)."""
         rd = ExcelLoadXML(file_excel)
         return cls(rd)
+
+
+__all__ = ['ReadSheetExcel', 'ExcelLoad']

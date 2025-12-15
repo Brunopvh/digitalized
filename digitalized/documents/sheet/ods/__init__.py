@@ -1,1 +1,2 @@
-from .load import ReadSheetODS
+from .load import ReadSheetODS, ODSLoad
+

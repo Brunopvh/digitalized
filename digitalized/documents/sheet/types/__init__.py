@@ -167,6 +167,9 @@ class WorkbookData(dict[str, SheetData]):
         _keys = self.keys()
         return self[_keys[idx]]
 
+    def get_sheet(self, name: str) -> SheetData:
+        return self[name]
+
     def keys(self) -> list[str]:
         return list(super().keys())
 
