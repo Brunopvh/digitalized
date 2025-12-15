@@ -451,8 +451,9 @@ class ReadSheetODS(object):
 
     @classmethod
     def create_load_odfpy(cls, ods_file: str | BytesIO) -> ReadSheetODS:
-        rd = ODSLoadODFpy(ods_file)
-        return cls(rd)
+        #rd = ODSLoadODFpy(ods_file)
+        #return cls(rd)
+        raise NotImplementedError()
 
     @classmethod
     def create_load_pandas(cls, ods_file: str | BytesIO) -> ReadSheetODS:

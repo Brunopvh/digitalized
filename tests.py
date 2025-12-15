@@ -9,16 +9,17 @@ MODULES_DIR = os.path.join(ROOT_DIR, 'sheet_stream')
 
 sys.path.insert(0, MODULES_DIR)
 
-f = '/home/brunoc/Documentos/LV10.xlsx'
-ods = '/home/brunoc/Documentos/LV10.ods'
+ods = '/home/bruno/Documentos/BASE.ods'
+out = '/home/bruno/Documentos/teste.ods'
 
 
 def test():
     from digitalized.documents.sheet.excel.load import ReadSheetExcel
     from digitalized.documents.sheet.ods import ReadSheetODS
 
-    ld = ReadSheetODS.create_load_pandas(ods)
-    print(ld.get_workbook_data().get_last())
+    ld = ReadSheetODS.create_load_odfpy(ods)
+    ld.get_workbook_data().get_last().to_data_frame().to_excel(out)
+
 
 
 def main():
