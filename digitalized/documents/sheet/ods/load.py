@@ -4,7 +4,6 @@ from abc import ABC, abstractmethod
 import pandas as pd
 from typing import Any
 import zipfile
-import xml.etree.ElementTree as ET
 
 
 #===========================================================#
@@ -17,29 +16,14 @@ from odf.text import P
 from odf import teletype
 #from odf.namespaces import OFFICENS
 
-
-# Módulos locais
-# O pacote ODS usará suas próprias funções auxiliares e classes de mapeamento
-# (pois a estrutura XML é diferente do XLSX).
-# Você deve criar um novo arquivo para as funções de baixo nível do ODS:
 from digitalized.documents.erros import *
 from digitalized.documents.sheet.types import (
-    SheetData, SheetIndexNames, WorkbookData, RowIterator
+    SheetData, SheetIndexNames, WorkbookData, RowSheetIterator
 )
 from digitalized.documents.sheet.xml import (
     read_zip_xml, WorkbookMappingXML
 )
-
-# from digitalized.documents.sheet.ods._load_xml_ods import (
-#     read_zip_xml, ODSFileNames, ODSXMLProcessor
-# )
-
-#===========================================================#
-# CLASSES DE DADOS E ESTRUTURA (REUTILIZADAS)
-#===========================================================#
-# (Omitidas por serem idênticas)
-# Coloque a definição das classes
-# RowIterator, SheetIndexNames, SheetData, WorkbookData aqui)
+from digitalized.types.core import ObjectAdapter
 
 #===========================================================#
 # CLASSES BASE E ADAPTADORES (ODS)
@@ -50,6 +34,10 @@ class ODSLoad(ABC):
     """
     Classe abstrata base para carregadores de planilhas ODS.
     """
+
+    @abstractmethod
+    def hash(self) -> int:
+        pass
 
     @abstractmethod
     def get_sheet_index(self) -> SheetIndexNames:
@@ -80,6 +68,9 @@ class ODSLoadPandas(ODSLoad):
     def __init__(self, ods_file: str | BytesIO):
         self.ods_file: str | BytesIO = ods_file
         self.__sheet_names: list[str] | None = None
+
+    def hash(self) -> int:
+        return hash(self.ods_file)
 
     def get_sheet_index(self) -> SheetIndexNames:
         # Pandas suporta ODS via pd.ExcelFile ou pd.read_excel
@@ -130,6 +121,9 @@ class ODSLoadODFpy(ODSLoad):
         # ===========================================================#
         # Namespace URI para atributos de Tabela ODS (table:number-rows-repeated, etc.)
         self.ODF_TABLE_NS = 'urn:oasis:names:tc:opendocument:xmlns:table:1.0'
+
+    def hash(self) -> int:
+        return hash(self.ods_file)
 
     def __get_wb(self) -> OpenDocument:
         if self.__workbook is None:
@@ -400,6 +394,9 @@ class ODSLoadXML(ODSLoad):
         self.__workbook_data: WorkbookData | None = None
         self.__sheet_index_names: SheetIndexNames | None = None
 
+    def hash(self) -> int:
+        return hash(self.ods_file)
+
     def get_sheet_index(self) -> SheetIndexNames:
         if self.__sheet_index_names is None:
             if not self.__processor.sheet_names:
@@ -432,28 +429,35 @@ class ODSLoadXML(ODSLoad):
 # CLASSE PRINCIPAL DE LEITURA (FACTORY)
 # --------------------------------------------------------------------------------
 
-class ReadSheetODS(object):
+class ReadSheetODS(ObjectAdapter):
 
     def __init__(self, reader: ODSLoad):
-        self.reader: ODSLoad = reader
+        super().__init__()
+        self.__reader: ODSLoad = reader
+
+    def get_implementation(self) -> ODSLoad:
+        return self.__reader
+
+    def hash(self) -> int:
+        return self.get_implementation().hash()
 
     def get_workbook_data(self) -> WorkbookData:
-        return self.reader.get_workbook_data()
+        return self.__reader.get_workbook_data()
 
     def get_sheet_at(self, idx: int) -> SheetData:
-        return self.reader.get_sheet_at(idx)
+        return self.__reader.get_sheet_at(idx)
 
     def get_sheet(self, sheet_name: str | None = None) -> SheetData:
-        return self.reader.get_sheet(sheet_name)
+        return self.__reader.get_sheet(sheet_name)
 
     def get_sheet_index(self) -> SheetIndexNames:
-        return self.reader.get_sheet_index()
+        return self.__reader.get_sheet_index()
 
     @classmethod
     def create_load_odfpy(cls, ods_file: str | BytesIO) -> ReadSheetODS:
-        #rd = ODSLoadODFpy(ods_file)
-        #return cls(rd)
-        raise NotImplementedError()
+        rd = ODSLoadODFpy(ods_file)
+        return cls(rd)
+        #raise NotImplementedError()
 
     @classmethod
     def create_load_pandas(cls, ods_file: str | BytesIO) -> ReadSheetODS:

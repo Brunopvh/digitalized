@@ -1,7 +1,7 @@
 from __future__ import annotations
 from collections.abc import Iterator, Hashable
 from digitalized.documents.sheet import (
-    SheetData, WorkbookData, RowIterator, SheetIndexNames
+    SheetData, WorkbookData, RowSheetIterator, SheetIndexNames
 )
 import pandas as pd
 from soup_files import File, Directory

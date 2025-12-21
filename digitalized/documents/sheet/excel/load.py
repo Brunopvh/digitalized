@@ -13,9 +13,15 @@ from digitalized.documents.erros import *
 from digitalized.documents.sheet.types import SheetData, WorkbookData, SheetIndexNames
 from digitalized.documents.sheet.xml import read_zip_xml, WorkbookMappingXML
 from digitalized.documents.sheet.excel._col_index import column_coord_to_index
+from digitalized.types.core import ObjectAdapter
+from digitalized.util import get_md5_bytes
 
 
 class ExcelLoad(ABC):
+
+    @abstractmethod
+    def hash(self) -> int:
+        pass
 
     @abstractmethod
     def get_sheet_index(self) -> SheetIndexNames:
@@ -42,6 +48,10 @@ class ExcelLoadOpenPyxl(ExcelLoad):
         super().__init__()
         self.file_excel: str | BytesIO = file_excel
         self.__workbook: Workbook | None = None
+        self.__hash: int = hash(file_excel)
+
+    def hash(self) -> int:
+        return self.__hash
 
     def __get_wb(self) -> Workbook:
         if self.__workbook is None:
@@ -121,6 +131,10 @@ class ExcelLoadPandas(ExcelLoad):
 
     def __init__(self, xlsx_file):
         self.xlsx_file: str | BytesIO = xlsx_file
+        self.__hash: int = hash(xlsx_file)
+
+    def hash(self) -> int:
+        return self.__hash
 
     def get_sheet_index(self) -> SheetIndexNames:
         rd: pd.ExcelFile = pd.ExcelFile(self.xlsx_file)
@@ -368,6 +382,10 @@ class ExcelLoadXML(ExcelLoad):
         self.__processor: XMLProcessor = XMLProcessor(file_excel)
         self.__workbook_data: WorkbookData | None = None
         self.__sheet_index_names: SheetIndexNames | None = None
+        self.__hash: int = hash(file_excel)
+
+    def hash(self) -> int:
+        return self.__hash
 
     def get_sheet_index(self) -> SheetIndexNames:
         if self.__sheet_index_names is None:
@@ -413,22 +431,29 @@ class ExcelLoadXML(ExcelLoad):
 #===========================================================#
 
 
-class ReadSheetExcel(object):
+class ReadSheetExcel(ObjectAdapter):
 
     def __init__(self, reader: ExcelLoad):
-        self.reader: ExcelLoad = reader
+        super().__init__()
+        self.__reader: ExcelLoad = reader
+
+    def get_implementation(self) -> ExcelLoad:
+        return self.__reader
+
+    def hash(self) -> int:
+        return self.get_implementation().hash()
 
     def get_workbook_data(self) -> WorkbookData:
-        return self.reader.get_workbook_data()
+        return self.__reader.get_workbook_data()
 
     def get_sheet_at(self, idx: int) -> SheetData:
-        return self.reader.get_sheet_at(idx)
+        return self.__reader.get_sheet_at(idx)
 
     def get_sheet(self, sheet_name: str | None = None) -> SheetData:
-        return self.reader.get_sheet(sheet_name)
+        return self.__reader.get_sheet(sheet_name)
 
     def get_sheet_index(self) -> SheetIndexNames:
-        return self.reader.get_sheet_index()
+        return self.__reader.get_sheet_index()
 
     @classmethod
     def create_load_open_pyxl(cls, file_excel: str | BytesIO) -> ReadSheetExcel:

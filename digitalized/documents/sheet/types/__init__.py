@@ -3,7 +3,7 @@ from collections.abc import Iterator
 import pandas as pd
 
 
-class RowIterator(Iterator):
+class RowSheetIterator(Iterator):
 
     def __init__(self, sheet: SheetData, reverse: bool = False):
         self.sheet: SheetData = sheet
@@ -95,8 +95,8 @@ class SheetData(dict[str, list[str]]):
             row.append(value)
         return row
 
-    def row_iterator(self, reverse: bool = False) -> RowIterator:
-        return RowIterator(self, reverse)
+    def row_iterator(self, reverse: bool = False) -> RowSheetIterator:
+        return RowSheetIterator(self, reverse)
 
     def get_first(self) -> list[str]:
         _k = self.keys()[0]
