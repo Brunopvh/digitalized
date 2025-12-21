@@ -6,7 +6,6 @@ from typing import Literal, Any, Callable
 from dataclasses import dataclass
 from soup_files import File, Directory
 from pytesseract import pytesseract
-import easyocr
 from reportlab.pdfgen import canvas
 from reportlab.lib.utils import ImageReader
 import cv2
@@ -23,8 +22,19 @@ try:
 except ImportError:
     import pymupdf as fitz
 
+try:
+    import keras_ocr
+    import numpy as np
+except Exception as e:
+    print(f"Alerta: {e}")
 
-LibOcr = Literal['pytesseract', 'easyocr']
+try:
+    import easyocr
+except Exception as err:
+    print(f'Alerta: {err}')
+
+
+LibOcr = Literal['pytesseract', 'easyocr', 'kerasocr']
 
 
 def create_document_from_image(img: ImageObject) -> fitz.Document:
@@ -331,6 +341,68 @@ class BuildEasyOcr(object):
         return ImplementEasyOcr(kwargs=self.kwargs)
 
 
+# ======================================================================#
+# Implementação com keras-ocr
+# ======================================================================#
+
+
+class ImplementKerasOcr(InterfaceTesseractOcr):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        """
+        :param kwargs['scale']: float para redimensionar imagem se necessário.
+        """
+        # O keras-ocr baixa os pesos automaticamente na primeira execução
+        self.pipeline = keras_ocr.pipeline.Pipeline()
+        self.func_txt: Callable[[ImageObject, list], TextRecognized] = include_text_on_image_as_pdf
+
+    def __hash__(self) -> int:
+        return hash(f'{self.get_bin_tess().__hash__()}kerasocr')
+
+    def get_current_library(self) -> str:
+        return 'kerasocr'
+
+    def get_image_text(self, img: ImageObject) -> str:
+        # keras-ocr espera uma lista de imagens ou uma imagem (numpy array)
+        # O método read trabalha com RGB
+        _im = img.to_image_opencv()
+        _im_rgb = cv2.cvtColor(_im, cv2.COLOR_BGR2RGB)
+
+        # predictions é uma lista de listas (uma para cada imagem enviada)
+        predictions: list[tuple[str, Any]] = self.pipeline.recognize([_im_rgb])[0]
+        # predictions[i] = (texto, box)
+        text = '\n'.join([res[0] for res in predictions])
+        return text
+
+    def get_recognized_text(self, img: ImageObject) -> TextRecognized:
+        _im = img.to_image_opencv()
+        _im_rgb = cv2.cvtColor(_im, cv2.COLOR_BGR2RGB)
+        predictions: list[tuple[str, Any]] = self.pipeline.recognize([_im_rgb])[0]
+
+        # Adaptar o formato do keras-ocr para o formato esperado pelo include_text_on_image_as_pdf
+        # Keras-ocr retorna: (text, box_array)
+        # O formato esperado na sua função é: [res[0]=bbox, res[1]=text, res[2]=confidence]
+        raw_results = []
+        for text, box in predictions:
+            # Keras-ocr não retorna confiança por padrão na tupla básica,
+            # setamos 1.0 ou extraímos se disponível.
+            raw_results.append([box.tolist(), text, 1.0])
+        return self.func_txt(img, raw_results)
+
+    @classmethod
+    def builder(cls) -> BuildKerasOcr:
+        return BuildKerasOcr()
+
+
+class BuildKerasOcr(object):
+    def __init__(self):
+        self.kwargs = dict()
+        # Você pode adicionar configurações de detector/reconhecedor aqui se desejar
+
+    def build(self) -> ImplementKerasOcr:
+        return ImplementKerasOcr(**self.kwargs)
+
+
 class TesseractOcr(ObjectAdapter):
 
     def __init__(self, interface_ocr: InterfaceTesseractOcr):
@@ -372,6 +444,11 @@ class TesseractOcr(ObjectAdapter):
                 return cls(ImplementEasyOcr(**kwargs))
             else:
                 return cls(ImplementEasyOcr.builder().build())
+        elif lib_ocr == "kerasocr":
+            if kwargs:
+                return cls(ImplementKerasOcr(**kwargs))
+            else:
+                return cls(ImplementKerasOcr.builder().build())
         else:
             raise NotImplementedModuleTesseractError()
 

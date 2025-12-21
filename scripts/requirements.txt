@@ -6,7 +6,8 @@ soup_files>=1.4
 scipy
 chardet
 pytesseract
-easyocr
-#easy-ocr
+#easyocr
+#keras-ocr
+#tensorflow
 
 
