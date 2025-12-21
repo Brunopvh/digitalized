@@ -21,7 +21,17 @@ from digitalized.ocr.error import (
     NotImplementedModuleTesseractError
 )
 
+try:
+    import fitz
+except ImportError:
+    import pymupdf as fitz
+
+
 LibOcr = Literal['pytesseract', 'easyocr']
+
+
+def get_document_from_bytes(doc_bytes: bytes) -> fitz.Document:
+    pass
 
 
 class TextRecognized(object):
@@ -30,7 +40,7 @@ class TextRecognized(object):
     """
 
     def __init__(self, bytes_recognized: bytes):
-        self.bytes_recognized: bytes = bytes_recognized
+        self.__bytes_recognized: bytes = bytes_recognized
         self.__text_document: str | None = None
 
         self.list_bad_char: list[str] = [
@@ -43,15 +53,15 @@ class TextRecognized(object):
             '%', '~', '¥', '♀',
         ]
 
-    @property
-    def is_empty(self) -> bool:
-        txt = self.to_string()
-        if (txt is None) or (txt == '') or (txt == 'nas'):
-            return True
-        return False
+    def get_document(self) -> fitz.Document:
+        _doc = fitz.Document(stream=self.__bytes_recognized, filetype="pdf")
+        return _doc
 
-    def to_string(self) -> str | None:
-        pass
+    def to_file(self, file_path: File) -> None:
+        self.get_document().save(file_path.absolute())
+
+    def get_text(self) -> str | None:
+        return self.get_document()[0].get_text()
 
 
 class InterfaceTesseractOcr(ABC):
@@ -191,6 +201,9 @@ class ImplementEasyOcr(InterfaceTesseractOcr):
         pdf = canvas.Canvas(buffer, pagesize=(img_w, img_h))
 
         # Desenha a imagem original como fundo
+        success, encoded_image = cv2.imencode('.png', img_cv)
+        #img_stream = BytesIO(encoded_image.tobytes())
+        #pdf.drawImage(ImageReader(img_stream), 0, 0, width=img_w, height=img_h)
         img_pil = Image.fromarray(cv2.cvtColor(img_cv, cv2.COLOR_BGR2RGB))
         pdf.drawImage(ImageReader(img_pil), 0, 0, width=img_w, height=img_h)
 

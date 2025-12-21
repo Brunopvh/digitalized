@@ -15,25 +15,22 @@ from digitalized.documents.image.image import LibImage, ImageObject
 import pandas as pd
 from soup_files import File, UserFileSystem, Directory, InputFiles
 
-base = '/home/brunoc/Downloads/base.xlsx'
-ods_file = '/home/brunoc/Documentos/EXCEL/LV10.ods'
-file_csv = '/home/brunoc/Documentos/EXCEL/ANALITICO/2025-11 ANALITICO REG NORTE.csv'
-
-output_dir = '/home/brunoc/Downloads/output'
-img = '/mnt/dados/2025-11-02 Cartas Toi WhatsApp/OriginLocalidades/EXT/EXTREMA - JAN A JUN 2025/NOMEADOS/278970/EXTREMA_--107-- UC 278970 167393150 POSTAGEM nan..png'
-img2 = '/mnt/dados/2025-11-02 Cartas Toi WhatsApp/OriginLocalidades/EXT/EXTREMA - JAN A JUN 2025/NOMEADOS/1030464/EXTREMA_--107-- UC 1030464 152298670 POSTAGEM -..png'
-
 output = UserFileSystem().userDownloads
 
 
 def test():
+    from digitalized.documents.image.image import ImageObject
     from digitalized.ocr.tesseract import BinTesseract
-    from digitalized.ocr.recognize import TesseractOcr
+    from digitalized.ocr.recognize import TesseractOcr, TextRecognized
     from digitalized.types.array import ArrayList
 
-    tess1 = TesseractOcr.crate("easyocr", kwargs={"gpu": False})
-    tess2 = TesseractOcr.crate("easyocr", kwargs={"gpu": False})
-    print(tess1.iqual(tess2))
+    image_file = File('/mnt/dados/ERO/2025-11-02 Cartas Toi WhatsApp/Output/GM E NM/OutputString/NOVA MAMORE 1060346 160154310 N6169165586.jpg')
+    rec = TesseractOcr.crate()
+
+    img = ImageObject.create_from_file(image_file)
+    img.set_background("gray")
+    t = rec.get_recognized_text(img)
+    print(t.get_text())
 
 
 def main():
