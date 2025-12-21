@@ -2,16 +2,13 @@
 from __future__ import annotations
 from io import BytesIO
 from abc import abstractmethod, ABC
-from typing import Union, Literal, Any
-from pandas import DataFrame
+from typing import Literal, Any, Callable
+from dataclasses import dataclass
 from soup_files import File, Directory
 from pytesseract import pytesseract
 import easyocr
-import os.path
 from reportlab.pdfgen import canvas
-#from reportlab.lib.pagesizes import A4
 from reportlab.lib.utils import ImageReader
-from PIL import Image
 import cv2
 from digitalized.types.core import ObjectAdapter
 from digitalized.ocr.tesseract import BinTesseract, CheckTesseractSystem
@@ -30,8 +27,94 @@ except ImportError:
 LibOcr = Literal['pytesseract', 'easyocr']
 
 
-def get_document_from_bytes(doc_bytes: bytes) -> fitz.Document:
-    pass
+def create_document_from_image(img: ImageObject) -> fitz.Document:
+    # Converter o objeto de entrada para imagem OpenCV
+    img_h, img_w = img.get_height(), img.get_width()
+
+    # Converter a imagem para PDF (imagem de fundo)
+    buffer = BytesIO()
+    pdf = canvas.Canvas(buffer, pagesize=(img_w, img_h))
+
+    # Desenha a imagem original como fundo
+    success, encoded_image = cv2.imencode('.png', img.to_image_opencv())
+    img_stream = BytesIO(encoded_image.tobytes())
+    pdf.drawImage(ImageReader(img_stream), 0, 0, width=img_w, height=img_h)
+
+    # Adiciona o texto OCR como camada "invisível" sobre a imagem
+    pdf.setFont("Helvetica", 8)
+    pdf.setFillColorRGB(1, 1, 1, alpha=0)  # texto invisível
+    pdf.showPage()
+    pdf.save()
+    buffer.seek(0)
+    final_bytes: bytes = buffer.read()
+    buffer.close()
+    return fitz.Document(stream=final_bytes, filetype="pdf")
+
+
+# ======================================================================#
+# Tipo para Easy Ocr
+# ======================================================================#
+
+@dataclass
+class OCRResult:
+    text: str
+    confidence: float
+    bbox: list[list[int]]  # [[x1, y1], [x2, y2], [x3, y3], [x4, y4]]
+
+    @property
+    def x_min(self) -> int: return self.bbox[0][0]
+
+    @property
+    def y_min(self) -> int: return self.bbox[0][1]
+
+    @property
+    def width(self) -> int: return abs(self.bbox[1][0] - self.bbox[0][0])
+
+    @property
+    def y_avg(self) -> float:
+        return sum(p[1] for p in self.bbox) / 4
+
+
+def include_text_on_image_as_pdf(image: ImageObject, raw_results: list) -> TextRecognized:
+    """
+    Recebe um fitz.Document (com a imagem) e os resultados do OCR,
+    retornando um PDF pesquisável (imagem + texto sobreposto).
+    """
+    # Converter o objeto de entrada para imagem OpenCV
+    img_w, img_h = image.get_width(), image.get_height()
+
+    # Converter a imagem para PDF (imagem de fundo)
+    buffer = BytesIO()
+    _pdf_canvas = canvas.Canvas(buffer, pagesize=(img_w, img_h))
+
+    # Desenha a imagem original como fundo
+    success, encoded_image = cv2.imencode('.png', image.to_image_opencv())
+    img_stream = BytesIO(encoded_image.tobytes())
+    _pdf_canvas.drawImage(ImageReader(img_stream), 0, 0, width=img_w, height=img_h)
+
+    # Adiciona o texto OCR como camada "invisível" sobre a imagem
+    _pdf_canvas.setFont("Helvetica", 8)
+    _pdf_canvas.setFillColorRGB(1, 1, 1, alpha=0)  # texto invisível
+
+    # Converter os resultados do EasyOCR para classe tipada
+    results: list[OCRResult] = [
+        OCRResult(text=res[1], confidence=res[2], bbox=res[0]) for res in raw_results
+    ]
+    item: OCRResult
+    for item in results:
+        if not item.text.strip():
+            continue
+        # No PDF (ReportLab), a origem (0,0) é no canto INFERIOR esquerdo.
+        # No OCR/OpenCV, a origem é no canto SUPERIOR esquerdo.
+        y_pdf = img_h - item.y_avg
+        _pdf_canvas.drawString(item.x_min, y_pdf, item.text)
+
+    _pdf_canvas.showPage()
+    _pdf_canvas.save()
+    buffer.seek(0)
+    output_bytes = buffer.read()
+    buffer.close()
+    return TextRecognized(output_bytes)
 
 
 class TextRecognized(object):
@@ -57,7 +140,7 @@ class TextRecognized(object):
         _doc = fitz.Document(stream=self.__bytes_recognized, filetype="pdf")
         return _doc
 
-    def to_file(self, file_path: File) -> None:
+    def to_file_pdf(self, file_path: File) -> None:
         self.get_document().save(file_path.absolute())
 
     def get_text(self) -> str | None:
@@ -194,6 +277,8 @@ class ImplementEasyOcr(InterfaceTesseractOcr):
             model_storage_directory=model_storage_directory
         )
 
+        self.func_txt: Callable[[ImageObject, list], TextRecognized] = include_text_on_image_as_pdf
+
     def __hash__(self) -> int:
         return hash(f'{self.get_bin_tess().__hash__()}easyocr')
 
@@ -206,50 +291,8 @@ class ImplementEasyOcr(InterfaceTesseractOcr):
         return text
 
     def get_recognized_text(self, img: ImageObject) -> TextRecognized:
-        # Converter o objeto de entrada para imagem OpenCV
-        img_cv = img.to_image_opencv()
-        img_h, img_w = img_cv.shape[:2]
-
-        # Reconhecer o texto com EasyOCR
-        results: list = self.reader.readtext(img_cv)
-
-        # Converter a imagem para PDF (imagem de fundo)
-        buffer = BytesIO()
-        pdf = canvas.Canvas(buffer, pagesize=(img_w, img_h))
-
-        # Desenha a imagem original como fundo
-        success, encoded_image = cv2.imencode('.png', img_cv)
-        #img_stream = BytesIO(encoded_image.tobytes())
-        #pdf.drawImage(ImageReader(img_stream), 0, 0, width=img_w, height=img_h)
-        img_pil = Image.fromarray(cv2.cvtColor(img_cv, cv2.COLOR_BGR2RGB))
-        pdf.drawImage(ImageReader(img_pil), 0, 0, width=img_w, height=img_h)
-
-        # Adiciona o texto OCR como camada "invisível" sobre a imagem
-        pdf.setFont("Helvetica", 8)
-        pdf.setFillColorRGB(1, 1, 1, alpha=0)  # texto invisível
-
-        for (bbox, text, conf) in results:
-            if not text.strip():
-                continue
-            # Coordenadas do bounding box (EasyOCR retorna 4 pontos)
-            (x1, y1), (x2, y2), (x3, y3), (x4, y4) = bbox
-
-            # Média da posição vertical
-            avg_y = (y1 + y2 + y3 + y4) / 4
-
-            # Posição invertida (PDF tem origem no canto inferior esquerdo)
-            y_pdf = img_h - avg_y
-
-            # Largura estimada
-            text_width = abs(x2 - x1)
-            pdf.drawString(x1, y_pdf, text)
-
-        pdf.showPage()
-        pdf.save()
-        buffer.seek(0)
-        # Retorna como TextRecognized (bytes do PDF com texto embutido)
-        text_rec = TextRecognized(buffer.read())
-        return text_rec
+        results: list = self.reader.readtext(img.to_image_opencv())
+        return self.func_txt(img, results)
 
     @classmethod
     def builder(cls) -> BuildEasyOcr:
