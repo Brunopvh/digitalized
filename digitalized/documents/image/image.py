@@ -87,6 +87,16 @@ class ABCImageObject(ABC):
         self.__invert_color: ImageInvertColor = None
 
     @abstractmethod
+    def get_width(self) -> int:
+        """Retorna a largura da imagem."""
+        pass
+
+    @abstractmethod
+    def get_height(self) -> int:
+        """Retorna a altura da imagem."""
+        pass
+
+    @abstractmethod
     def set_image_bytes(self, img_bytes: bytes):
         pass
 
@@ -201,15 +211,14 @@ class ImplementInvertColorOpenCv(ABCInvertColor):
         if self.is_gaussian_blur():
             return
         # Aplica um filtro Gaussiano para reduzir o ruído
-        _blurred: MatLike = cv2.GaussianBlur(
-            image_bytes_to_opencv(self.__image_bytes), (3, 3), 0.5
-        )
+        #_blurred: MatLike = cv2.GaussianBlur(image_bytes_to_opencv(self.__image_bytes), (5, 5), 0)
+        _blurred = cv2.bilateralFilter(image_bytes_to_opencv(self.__image_bytes), d=9, sigmaColor=75, sigmaSpace=75)
         self.__image_bytes = image_opencv_to_bytes(_blurred)
         self.__gaussian_blur = True
 
     def set_background(self, background: BackgroundColor = "gray"):
         if background == "gray":
-            self.__set_background_black()
+            self.__set_background_gray()
         elif background == "black":
             self.__set_background_black()
         else:
@@ -233,9 +242,10 @@ class ImplementInvertColorOpenCv(ABCInvertColor):
     def __set_background_gray(self):
         self.set_gaussian_blur()
         # Aplica binarização adaptativa (texto preto, fundo branco)
+        _img: cv2.typing.MatLike = image_bytes_to_opencv(self.__image_bytes)
         _binary = cv2.adaptiveThreshold(
-            image_bytes_to_opencv(self.__image_bytes),
-            150,
+            _img,
+            255,
             cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
             cv2.THRESH_BINARY,  # Inverte o texto para ser branco inicialmente
             11,
@@ -407,20 +417,22 @@ class ImageObjectPIL(ABCImageObject):
         try:
             img = Image.open(BytesIO(image_bytes))
         except Exception as e:
-            raise ValueError(f"{__class__.__name__}\nPIL: Bytes de imagem inválidos")
-        else:
-            self.dimensions = img.size
+            raise ValueError(f"{__class__.__name__}\nPIL: {e}")
 
         # Redimensionar, se as dimensões forem maior que self.max_size.
         if img.width > self.max_size[0] or img.height > self.max_size[1]:
-            # img.thumbnail(self.max_size, Image.LANCZOS)  # Mantém proporção
             buff_image: BytesIO = BytesIO()
             img.save(buff_image, format='PNG', optimize=True, quality=80)
             self.__img_bytes = buff_image.getvalue()
-            self.dimensions = img.size
             buff_image.seek(0)
             buff_image.close()
         del img
+
+    def get_width(self) -> int:
+        return self.to_image_pil().width
+
+    def get_height(self) -> int:
+        return self.to_image_pil().height
 
     def set_image_bytes(self, img_bytes: bytes):
         self.__img_bytes = img_bytes
@@ -455,7 +467,7 @@ class ImageObjectPIL(ABCImageObject):
         """
         Retorna True se a imagem estiver em modo paisagem.
         """
-        width, height = self.dimensions
+        width, height = self.get_width(), self.get_height()
         return width > height
 
     def set_rotation(self, rotation: RotationAngle = 90):
@@ -514,10 +526,10 @@ class ImageObjectOpenCV(ABCImageObject):
             print('-' * 80)
             raise ValueError(f"{__class__.__name__}: Bytes de imagem OpenCV inválidos")
         else:
-            self.dimensions = (image_opencv.shape[1], image_opencv.shape[0])  # (largura, altura)
+            _dimensions = (image_opencv.shape[1], image_opencv.shape[0])  # (largura, altura)
 
         # Redimensionar se necessário
-        if self.dimensions[0] > self.max_size[0] or self.dimensions[1] > self.max_size[1]:
+        if _dimensions[0] > self.max_size[0] or _dimensions[1] > self.max_size[1]:
             h, w = image_opencv.shape[:2]
             scale = min(self.max_size[0] / w, self.max_size[1] / h)
             new_size = (int(w * scale), int(h * scale))
@@ -525,8 +537,12 @@ class ImageObjectOpenCV(ABCImageObject):
             # Converter a imagem de volta para bytes
         _, encoded_img = cv2.imencode('.png', image_opencv)
         self.__image_bytes = encoded_img.tobytes()
-        # Atualizar dimensões após redimensionamento
-        self.dimensions = (image_opencv.shape[1], image_opencv.shape[0])
+
+    def get_width(self) -> int:
+        return self.to_image_opencv().shape[1]
+
+    def get_height(self) -> int:
+        return self.to_image_opencv().shape[0]
 
     def set_image_bytes(self, img_bytes: bytes):
         self.__image_bytes = img_bytes
@@ -547,7 +563,7 @@ class ImageObjectOpenCV(ABCImageObject):
         """
         Retorna True se a imagem estiver em modo paisagem.
         """
-        width, height = self.dimensions
+        width, height = self.get_width(), self.get_height()
         return width > height
 
     def set_rotation(self, rotation: RotationAngle = 90):
@@ -571,7 +587,6 @@ class ImageObjectOpenCV(ABCImageObject):
             nparr = np.frombuffer(self.__image_bytes, np.uint8)
             img: MatLike = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
             img: MatLike = cv2.rotate(img, cv2.ROTATE_90_COUNTERCLOCKWISE)  # Rotaciona -90 graus
-
             success, encoded_image = cv2.imencode('.png', img)
             if success:
                 self.__image_bytes = encoded_image.tobytes()
@@ -615,6 +630,12 @@ class ImageObject(ObjectAdapter):
 
     def hash(self) -> int:
         return hash(self.__implement_img.get_image_bytes())
+
+    def get_width(self) -> int:
+        return self.__implement_img.get_width()
+
+    def get_height(self) -> int:
+        return self.__implement_img.get_height()
 
     def set_image_bytes(self, img_bytes: bytes):
         self.__implement_img.set_image_bytes(img_bytes)

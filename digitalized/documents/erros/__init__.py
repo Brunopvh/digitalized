@@ -18,6 +18,12 @@ class InvalidSourceImageError(Exception):
         super().__init__(message)
 
 
+class NotImplementedModuleImageError(Exception):
+
+    def __init__(self, message: str = 'Erro, módulo imagem não implementado') -> None:
+        super().__init__(message)
+
+
 class NotImplementedInvertColor(NotImplementedError):
 
     def __init__(self, message: str = 'Adaptador InvertColor não implementado...') -> None:

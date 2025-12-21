@@ -97,6 +97,9 @@ class ArrayList(list[T], Generic[T]):
     def __hash__(self):
         return hash(tuple(self))
 
+    def map(self, func: Callable[[T], Any]) -> ArrayList[T]:
+        return ArrayList([func(item) for item in self])
+
     @property
     def empty(self) -> bool:
         return self.size() == 0
@@ -119,11 +122,9 @@ class ArrayList(list[T], Generic[T]):
     def hash(self) -> int:
         return hash(self)
 
-    def for_each(self, func: Callable[[T], Any]) -> list[T]:
-        new = list()
+    def for_each(self, func: Callable[[T], Any]) -> None:
         for i in self:
-            new.append(func(i))
-        return new
+            func(i)
 
 
 class ArrayString(ArrayList[str]):

@@ -33,29 +33,23 @@ class FilterData(object):
 
 class SearchInData(object):
 
-    def __init__(self, data: pd.DataFrame, filter_data: FilterData):
-        self.__data: pd.DataFrame = data.astype('str')
+    def __init__(self, filter_data: FilterData):
         self.__filter_data: FilterData = filter_data
-
-    def iterrows(self) -> Iterator[tuple[Hashable, pd.Series[str]]]:
-        return self.__data.iterrows()
-
-    def get_data(self) -> pd.DataFrame:
-        return self.__data
 
     def get_filter_data(self) -> FilterData:
         return self.__filter_data
 
-    def filter_items(self) -> pd.DataFrame:
+    def filter_items(self, data: pd.DataFrame) -> pd.DataFrame[str]:
         _col_find = self.get_filter_data().get_col_find()
         _value_find = self.get_filter_data().get_value_find()
-        final = self.get_data()[self.get_data()[_col_find] == _value_find]
+        final = data[data[_col_find] == _value_find].astype('str')
+
         if len(self.get_filter_data().get_return_cols()) > 0:
-            _select = list()
-            _select.append(_col_find)
-            _select.extend(self.get_filter_data().get_return_cols())
+            _select = self.get_filter_data().get_return_cols()
+            idx: int = final.columns.tolist().index(_col_find)
+            _select.insert(idx, _col_find)
             final = final[_select]
-        return final
+        return final.astype('str')
 
 
 class ParserData(object):
@@ -66,15 +60,22 @@ class ParserData(object):
     def get_data(self) -> pd.DataFrame:
         return self.__data
 
+    def remove_na(self, col: str) -> None:
+        self.__data = self.__data.dropna(subset=[col]).astype('str')
+
+    def remove_null(self, col: str) -> None:
+        self.remove_na(col)
+        self.__data = self.__data[self.__data[col] != ""].astype('str')
+
     def get_columns(self) -> list[str]:
         if self.get_data().empty:
             raise Exception(f"{__class__.__name__} No data available")
         return self.__data.astype('str').columns.tolist()
 
-    def select_columns(self, columns: list[str]) -> pd.DataFrame:
+    def select_columns(self, columns: list[str]) -> ParserData:
         if self.get_data().empty:
             raise Exception(f"{__class__.__name__} No data available")
-        return self.__data[columns]
+        return ParserData(self.__data[columns])
 
     def concat_columns(
                 self,
