@@ -4,7 +4,7 @@ from io import BytesIO
 from abc import abstractmethod, ABC
 from typing import Union, Literal, Any
 from pandas import DataFrame
-from soup_files import File
+from soup_files import File, Directory
 from pytesseract import pytesseract
 import easyocr
 import os.path
@@ -166,16 +166,33 @@ class ImplementEasyOcr(InterfaceTesseractOcr):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        """
+        :pararam kwargs['gpu']:
+            bool usar CPU ou GPU
+            
+        :pararam kwargs['langs']:
+            list[str] lista de linguagens, por, eng etc...
+            
+        :paraam kwargs['model_storage_directory']:
+            diretório de dados para lang tesseract.
+        """
+        _gpu = False
+        model_storage_directory = None
+        _langs = []
 
         if kwargs:
             if 'gpu' in kwargs:
-                self.reader: easyocr.Reader = easyocr.Reader(
-                    [self.get_bin_tess().get_lang()], gpu=kwargs['gpu']
-                )
-        else:
-            self.reader: easyocr.Reader = easyocr.Reader(
-                [self.get_bin_tess().get_lang()], gpu=False
-            )
+                _gpu = kwargs['gpu']
+            if 'langs' in kwargs:
+                _langs = kwargs['langs']
+            if 'model_storage_directory' in kwargs:
+                model_storage_directory = kwargs['model_storage_directory']
+
+        self.reader: easyocr.Reader = easyocr.Reader(
+            _langs,
+            gpu=_gpu,
+            model_storage_directory=model_storage_directory
+        )
 
     def __hash__(self) -> int:
         return hash(f'{self.get_bin_tess().__hash__()}easyocr')
@@ -234,6 +251,42 @@ class ImplementEasyOcr(InterfaceTesseractOcr):
         text_rec = TextRecognized(buffer.read())
         return text_rec
 
+    @classmethod
+    def builder(cls) -> BuildEasyOcr:
+        return BuildEasyOcr()
+
+
+class BuildEasyOcr(object):
+
+    def __init__(self):
+        self.kwargs = dict()
+        self.check: CheckTesseractSystem = CheckTesseractSystem.build()
+        self.kwargs['langs'] = self.check.get_langs()
+        self.kwargs['gpu'] = False
+        if self.check.get_tess_data_dir() is not None:
+            self.kwargs['model_storage_directory'] = self.check.get_tess_data_dir().absolute()
+
+    def set_gpu(self, gpu: bool) -> BuildEasyOcr:
+        self.kwargs['gpu'] = gpu
+        return self
+
+    def set_file_tesseract(self, file: File) -> BuildEasyOcr:
+        self.check.set_file_tesseract(file)
+        self.kwargs['path_tesseract'] = file.absolute()
+        return self
+
+    def set_tess_data_dir(self, d: Directory) -> BuildEasyOcr:
+        self.check.set_tess_data_dir(d)
+        self.kwargs['model_storage_directory'] = d.absolute()
+        return self
+
+    def set_langs(self, langs: list[str]) -> BuildEasyOcr:
+        self.kwargs['langs'] = langs
+        return self
+
+    def build(self) -> ImplementEasyOcr:
+        return ImplementEasyOcr(kwargs=self.kwargs)
+
 
 class TesseractOcr(ObjectAdapter):
 
@@ -264,11 +317,18 @@ class TesseractOcr(ObjectAdapter):
         return self.__implement_ocr.get_recognized_text(img)
 
     @classmethod
+    def builder_easyocr(cls) -> BuildEasyOcr:
+        return BuildEasyOcr()
+
+    @classmethod
     def crate(cls, lib_ocr: LibOcr = "pytesseract", **kwargs) -> TesseractOcr:
         if lib_ocr == "pytesseract":
             return cls(ImplementPyTesseract(**kwargs))
         elif lib_ocr == "easyocr":
-            return cls(ImplementEasyOcr(**kwargs))
+            if kwargs:
+                return cls(ImplementEasyOcr(**kwargs))
+            else:
+                return cls(ImplementEasyOcr.builder().build())
         else:
             raise NotImplementedModuleTesseractError()
 

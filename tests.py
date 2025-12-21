@@ -20,17 +20,17 @@ output = UserFileSystem().userDownloads
 
 def test():
     from digitalized.documents.image.image import ImageObject
-    from digitalized.ocr.tesseract import BinTesseract
+    from digitalized.ocr.tesseract import BinTesseract, CheckTesseractSystem
     from digitalized.ocr.recognize import TesseractOcr, TextRecognized
     from digitalized.types.array import ArrayList
 
     image_file = File('/mnt/dados/ERO/2025-11-02 Cartas Toi WhatsApp/Output/GM E NM/OutputString/NOVA MAMORE 1060346 160154310 N6169165586.jpg')
-    rec = TesseractOcr.crate()
+    image_obj = ImageObject.create_from_file(image_file)
 
-    img = ImageObject.create_from_file(image_file)
-    img.set_background("gray")
-    t = rec.get_recognized_text(img)
-    print(t.get_text())
+    rec = TesseractOcr.crate("easyocr")
+
+    txt = rec.get_image_text(image_obj)
+    print(txt)
 
 
 def main():

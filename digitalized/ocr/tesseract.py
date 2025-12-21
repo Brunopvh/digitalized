@@ -73,6 +73,22 @@ class CheckTesseractSystem(object):
     def set_tess_data_dir(self, tess_data_dir: Directory) -> None:
         self.__tess_data_dir = tess_data_dir
 
+    def get_files_trained_data(self) -> ArrayList[File]:
+        """
+        Retorna uma lista de arquivos '.traineddata' no diretório de dados.
+        """
+        if self.get_tess_data_dir() is None:
+            return ArrayList()
+        _in = InputFiles(self.get_tess_data_dir())
+        return ArrayList(_in.get_files_with(infile='traineddata'))
+
+    def get_langs(self) -> ArrayList[str]:
+        files: ArrayList[File] = self.get_files_trained_data()
+        if files.size() == 0:
+            return ArrayList()
+        langs: ArrayList[str] = files.map(lambda f: f.basename().split('.')[0])
+        return langs
+
     @classmethod
     def build(cls) -> CheckTesseractSystem:
         _check = cls()
@@ -139,6 +155,9 @@ class BinTesseract(object):
         return self.__tess_data_dir
 
     def get_local_langs(self) -> ArrayList[File]:
+        """
+        Retorna uma lista de arquivos '.traineddata' no diretório de dados.
+        """
         if self.get_tessdata_dir() is None:
             return ArrayList()
         _in = InputFiles(self.get_tessdata_dir())
@@ -158,8 +177,7 @@ class BinTesseract(object):
 class BuildTesseract(object):
 
     def __init__(self):
-        self.__TESS_DATA_DIR: Directory | None = CheckTesseractSystem.build().get_tess_data_dir()
-        self.__TESS_BIN: File | None = CheckTesseractSystem().get_file_tesseract()
+        self.check: CheckTesseractSystem = CheckTesseractSystem.build()
         self.__TESS_LANG: str = None
 
     def set_lang(self, lang: str) -> BuildTesseract:
@@ -167,26 +185,25 @@ class BuildTesseract(object):
         return self
 
     def set_tessdata_dir(self, tessdata_dir: Directory) -> BuildTesseract:
-        self.__TESS_DATA_DIR = tessdata_dir
+        self.check.set_tess_data_dir(tessdata_dir)
         return self
 
     def set_tess_bin(self, tess_bin: File) -> BuildTesseract:
-        self.__TESS_BIN = tess_bin
+        self.check.set_file_tesseract(tess_bin)
         return self
 
     def build(self) -> BinTesseract:
-        if self.__TESS_BIN is None:
+        if self.check.get_file_tesseract() is None:
             raise TesseractNotFoundError(
                 f'{__class__.__name__} path tesseract não foi definido!'
             )
-        if not self.__TESS_BIN.exists():
+        if not self.check.get_file_tesseract().exists():
             raise TesseractNotFoundError(
                 f'{__class__.__name__} path tesseract não foi definido!'
             )
-
         return BinTesseract(
-            self.__TESS_BIN,
-            tess_data_dir=self.__TESS_DATA_DIR,
+            self.check.get_file_tesseract(),
+            tess_data_dir=self.check.get_tess_data_dir(),
             lang=self.__TESS_LANG,
         )
 
