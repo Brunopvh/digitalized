@@ -19,18 +19,7 @@ output = UserFileSystem().userDownloads
 
 
 def test():
-    from digitalized.documents.image.image import ImageObject
-    from digitalized.ocr.tesseract import BinTesseract, CheckTesseractSystem
-    from digitalized.ocr.recognize import TesseractOcr, RecognizePdf, create_images_from_pdf
-    from digitalized.types.array import ArrayList
-
-    file_pdf = File('/home/brunoc/Downloads/Thiago  Coturno 42 NOV 2023.pdf')
-    final_pdf = output.join_file('final.pdf')
-
-    images = create_images_from_pdf(file_pdf.path.read_bytes())
-    rec = TesseractOcr.crate()
-    for x in images:
-        print(rec.get_recognized_text(x).get_text())
+    from digitalized.documents.sheet import ReadSheetCsv
 
 
 def main():

@@ -69,18 +69,15 @@ class CsvLoadNative(CsvLoad):
         sheet_data = SheetData()
 
         try:
-            content = self._get_content()
+            content: str = self._get_content()
             reader = csv.DictReader(StringIO(content), delimiter=self.delimiter)
-
             # Inicializa colunas baseadas no fieldnames
             if reader.fieldnames:
                 for header in reader.fieldnames:
                     sheet_data[header] = []
-
                 for row in reader:
                     for header in reader.fieldnames:
                         sheet_data[header].append(str(row[header] or ''))
-
             workbook_data.add_sheet("Sheet1", sheet_data)
         except Exception as e:
             raise LoadWorkbookError(f"CsvLoadNative Error: {e}")

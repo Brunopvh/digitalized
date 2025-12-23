@@ -100,6 +100,9 @@ class ArrayList(list[T], Generic[T]):
     def map(self, func: Callable[[T], Any]) -> ArrayList[T]:
         return ArrayList([func(item) for item in self])
 
+    def apply(self, func: Callable[[T], Any]) -> ArrayList[Any]:
+        return ArrayList([func(item) for item in self])
+
     @property
     def empty(self) -> bool:
         return self.size() == 0
@@ -196,7 +199,7 @@ class ArrayString(ArrayList[str]):
             new.append(self[num])
         return ArrayString(new)
 
-    def append(self, string):
+    def append(self, string: str):
         if not isinstance(string, str):
             raise TypeError(f"expected str, got {type(string)}")
         super().append(string)

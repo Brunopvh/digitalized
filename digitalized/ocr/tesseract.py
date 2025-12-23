@@ -86,8 +86,10 @@ class CheckTesseractSystem(object):
         files: ArrayList[File] = self.get_files_trained_data()
         if files.size() == 0:
             return ArrayList()
-        langs: ArrayList[str] = files.map(lambda f: f.basename().split('.')[0])
-        return langs
+        try:
+            return files.apply(lambda f: f.basename().split('.')[0])
+        except:
+            return ArrayList()
 
     @classmethod
     def build(cls) -> CheckTesseractSystem:

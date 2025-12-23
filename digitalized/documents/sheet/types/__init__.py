@@ -88,6 +88,9 @@ class SheetData(dict[str, list[str]]):
     def __init__(self):
         super().__init__({})
 
+    def __repr__(self):
+        return f"{__class__.__name__}(): {self.keys()}\n{self.values()}"
+
     def get_row(self, idx: int) -> list[str]:
         row = list()
         for _k in self.keys():
@@ -124,7 +127,7 @@ class SheetData(dict[str, list[str]]):
         return len(self[_name])
 
     def to_data_frame(self) -> pd.DataFrame:
-        return pd.DataFrame(self)
+        return pd.DataFrame.from_dict(self, orient='index').transpose()
 
     @classmethod
     def create_from_data(cls, data: pd.DataFrame) -> SheetData:
@@ -140,6 +143,9 @@ class WorkbookData(dict[str, SheetData]):
     def __init__(self):
         super().__init__({})
         self.__sheet_index_names: SheetIndexNames | None = None
+
+    def __repr__(self):
+        return f"{__class__.__name__}() {super().__repr__()}"
 
     def get_sheet_index_names(self) -> SheetIndexNames:
         """
