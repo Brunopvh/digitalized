@@ -18,9 +18,21 @@ class InvalidSourceImageError(Exception):
         super().__init__(message)
 
 
-class NotImplementedModuleImageError(Exception):
+class NotImplementedModuleError(Exception):
 
-    def __init__(self, message: str = 'Erro, módulo imagem não implementado') -> None:
+    def __init__(self, message: str = 'Erro, módulo não implementado') -> None:
+        super().__init__(message)
+
+
+class NotImplementedModuleImageError(NotImplementedModuleError):
+
+    def __init__(self, message: str = 'Erro, módulo IMAGEM não implementado') -> None:
+        super().__init__(message)
+
+
+class NotImplementedModulePdfError(NotImplementedModuleError):
+
+    def __init__(self, message: str = 'Erro, módulo PDF não implementado') -> None:
         super().__init__(message)
 
 

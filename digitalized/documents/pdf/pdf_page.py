@@ -299,6 +299,4 @@ class PageDocumentPdf(ObjectAdapter):
 
     @classmethod
     def create_from_page_fitz(cls, page: fitz.Page, number: int) -> PageDocumentPdf:
-        if page is None:
-            raise ValueError(f'fitz.Page não pode ser None')
         return cls(ImplementFitz(page, number))

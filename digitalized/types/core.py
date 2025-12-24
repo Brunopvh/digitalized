@@ -1,11 +1,16 @@
 from __future__ import annotations
 from typing import Any
 
+from digitalized.documents.erros import NotImplementedModulePdfError
+
 
 class ObjectAdapter(object):
 
     def __init__(self):
-        pass
+        super().__init__()
+
+    def get_real_interface(self) -> Any:
+        raise NotImplementedModulePdfError()
 
     def get_implementation(self) -> Any:
         raise NotImplementedError(
