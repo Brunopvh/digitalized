@@ -2,28 +2,32 @@
 import sys
 import os
 
+import fitz
+import soup_files as sp
+
 TEST_FILE = os.path.abspath(__file__)
 ROOT_DIR = os.path.dirname(TEST_FILE)
 MODULES_DIR = os.path.join(ROOT_DIR, 'sheet_stream')
-#EXPORT_DIR = sp.UserFileSystem().userDownloads.concat('output', create=True)
+
+output_dir = sp.UserFileSystem().userDownloads.concat('output', create=True)
 
 sys.path.insert(0, MODULES_DIR)
 
-from digitalized.documents.pdf.pdf_document import DocumentPdf
+from digitalized.documents.pdf.pdf_document import DocumentPdf, merge_pdf_bytes
+from digitalized.ocr.recognize import RecognizePdf
 import pandas as pd
-from soup_files import File, UserFileSystem, Directory, InputFiles
-
-output = UserFileSystem().userDownloads
-
-f = '/home/bruno/Documentos/OUTRO/2025-08 ORGANIZAÇÃO DE DOCUMENTOS DIGITALIZADOS COM O USO DA TECNOLOGIA OCR(1).pdf'
 
 
 def test():
 
-    _imp = DocumentPdf.build_interface().set_lib("fitz").set_bytes(File(f).path.read_bytes()).create()
-    doc = DocumentPdf(_imp)
-    doc.set_land_scape()
-    doc.to_file(output.join_file('test.pdf'))
+    _input_dir = sp.Directory('/mnt/dados/BACKUPS-PC/2025-09-23 MEU DRIVE/Documentos/60_DOCS DIVERSOS E COMPROVANTES/LAGOA AZUL/Lagoa azul contrato')
+    files = sp.InputFiles(_input_dir).pdfs
+
+    rec = RecognizePdf.crate()
+    f = files[1]
+    print(f.basename())
+    doc = rec.recognize_pdf(DocumentPdf.create_from_file(f))
+    doc.to_file(output_dir.join_file("ocr.pdf"))
 
 
 def main():

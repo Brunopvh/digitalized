@@ -18,6 +18,7 @@ from digitalized.documents.pdf.pdf_page import (
 
 if MODULE_PYPDF:
     from pypdf import PdfWriter, PdfReader, PageObject
+
 if MODULE_FITZ:
     try:
         import fitz
@@ -28,6 +29,89 @@ if MODULE_FITZ:
             MODULE_FITZ = True
         except ImportError:
             pass
+
+
+#======================================================================#
+# Funções para juntar/dividir documentos
+#======================================================================#
+def merge_pdf_bytes(
+            pdf_bytes_list: list[bytes], *,
+            lib_pdf: LibPDF = "fitz"
+        ) -> Union[fitz.Document, PdfReader]:
+    """
+    Mescla uma lista de bytes de PDFs
+    """
+    if len(pdf_bytes_list) == 0:
+        raise ValueError()
+
+    if lib_pdf == "fitz":
+        # Cria um documento novo e vazio
+        final_doc = fitz.open()
+        for pdf_bytes in pdf_bytes_list:
+            # Abre o PDF individual a partir dos bytes
+            current_doc: fitz.Document = fitz.open(stream=pdf_bytes, filetype="pdf")
+            # Insere todas as páginas do documento atual no documento final
+            #final_doc.insert_pdf(current_doc)
+            page: fitz.Page
+            for page in current_doc:
+                final_doc.insert_pdf(page.parent, from_page=page.number, to_page=page.number)
+            # Fecha o documento temporário para liberar memória
+            current_doc.close()
+        return final_doc
+    elif lib_pdf == "pypdf":
+        raise NotImplementedError()
+    else:
+        raise NotImplementedModulePdfError()
+
+
+def merge_documents(
+            pdf_documents: list[fitz.Document | PdfReader], *, lib_pdf: LibPDF = "fitz",
+        ) -> Union[fitz.Document | PdfReader]:
+    """
+    Mescla uma lista de documentos PDFs.
+    """
+    if len(pdf_documents) == 0:
+        raise ValueError()
+
+    if lib_pdf == "fitz":
+        # Cria um documento novo e vazio
+        final_doc = fitz.open()
+        pdf_doc: fitz.Document
+        for pdf_doc in pdf_documents:
+            # Insere todas as páginas do documento atual no documento final
+            _page: fitz.Page
+            for _page in pdf_doc:
+                final_doc.insert_pdf(_page.parent, from_page=_page.number, to_page=_page.number)
+            pdf_doc.close()
+        return final_doc
+    elif lib_pdf == "pypdf":
+        raise NotImplementedError()
+    else:
+        raise NotImplementedModulePdfError()
+
+
+def merge_pages_documents(
+            pages_pdf: list[fitz.Page | PageObject], *, lib_pdf: LibPDF = "fitz",
+        ) -> Union[fitz.Document | PdfReader]:
+    """
+    Mescla uma lista de documentos PDFs.
+    """
+    if len(pages_pdf) == 0:
+        raise ValueError()
+
+    if lib_pdf == "fitz":
+        # Cria um documento novo e vazio
+        final_doc = fitz.open()
+
+        # Insere todas as páginas do documento atual no documento final
+        _page: fitz.Page
+        for _page in pages_pdf:
+            final_doc.insert_pdf(_page.parent, from_page=_page.number, to_page=_page.number)
+        return final_doc
+    elif lib_pdf == "pypdf":
+        raise NotImplementedError()
+    else:
+        raise NotImplementedModulePdfError()
 
 
 class InterfaceDocumentPdf(ABC):
@@ -48,7 +132,6 @@ class InterfaceDocumentPdf(ABC):
     def get_real_module(self) -> Union[fitz.Document | PdfReader]:
         pass
 
-    @abstractmethod
     def set_real_module(self, module: Union[fitz.Document, PdfReader]):
         pass
 
@@ -77,13 +160,16 @@ class InterfaceDocumentPdf(ABC):
     def add_page(self, page: PageDocumentPdf):
         pass
 
-    @abstractmethod
     def add_pages(self, pages: list[PageDocumentPdf]):
-        pass
+        for pg in pages:
+            self.add_page(pg)
 
-    @abstractmethod
     def merge_document(self, document: InterfaceDocumentPdf):
-        pass
+        final_doc = merge_documents(
+            [self.get_real_module(), document.get_real_module()],
+            lib_pdf=self.get_current_library()
+        )
+        self.set_real_module(final_doc)
 
     @abstractmethod
     def to_file(self, file: File):
@@ -104,6 +190,10 @@ class InterfaceDocumentPdf(ABC):
     @classmethod
     def create_from_bytes(cls, bt: BytesIO) -> InterfaceDocumentPdf:
         pass
+
+    @classmethod
+    def builder(cls) -> BuilderInterfaceDocumentPdf:
+        return BuilderInterfaceDocumentPdf()
 
 
 class ImplementDocumentPdfFitz(InterfaceDocumentPdf):
@@ -127,7 +217,11 @@ class ImplementDocumentPdfFitz(InterfaceDocumentPdf):
         return "fitz"
 
     def merge_document(self, document: InterfaceDocumentPdf):
-        pass
+        final_doc: fitz.Document = merge_documents(
+            [self.get_real_module(), document.get_real_module()],
+            lib_pdf="fitz"
+        )
+        self.set_real_module(final_doc)
 
     def size(self) -> int:
         return self.pdf_doc.page_count
@@ -149,11 +243,11 @@ class ImplementDocumentPdfFitz(InterfaceDocumentPdf):
             return _page_pdf
 
     def add_page(self, page: PageDocumentPdf):
-        # Assume que page.get_implementation().get_real_page() é fitz.Page
+        # Assume que page.get_implementation().get_real_module() é fitz.Page
         self.pdf_doc.insert_pdf(
-            page.get_implementation().get_real_page().parent,
-            from_page=page.get_implementation().get_real_page().number,
-            to_page=page.get_implementation().get_real_page().number
+            page.get_implementation().get_real_module().parent,
+            from_page=page.get_implementation().get_real_module().number,
+            to_page=page.get_implementation().get_real_module().number
         )
 
     def add_pages(self, pages: list[PageDocumentPdf]):
@@ -175,10 +269,12 @@ class ImplementDocumentPdfFitz(InterfaceDocumentPdf):
         return bt
 
     def to_pages(self) -> list[PageDocumentPdf]:
-        pages = []
+        pages: list[PageDocumentPdf] = []
+        _builder = PageDocumentPdf.build_interface().set_lib_pdf(self.get_current_library())
         for num, pg in enumerate(self.pdf_doc):
-            page_pdf = PageDocumentPdf.create_from_page_fitz(pg, num + 1)
-            pages.append(page_pdf)
+            #page_pdf = PageDocumentPdf.create_from_page_fitz(pg, num + 1)
+            page_pdf = _builder.set_num_page(num+1).set_page(pg).create()
+            pages.append(PageDocumentPdf(page_pdf))
         return pages
 
     @classmethod
@@ -365,8 +461,8 @@ class DocumentPdf(ObjectAdapter):
     def size(self) -> int:
         return self._implement_interface_pdf.size()
 
-    def merge_document(self, document: InterfaceDocumentPdf):
-        return self._implement_interface_pdf.merge_document(document)
+    def merge_document(self, document: DocumentPdf):
+        return self._implement_interface_pdf.merge_document(document.get_implementation())
 
     def get_current_library(self) -> LibPDF:
         return self._implement_interface_pdf.get_current_library()

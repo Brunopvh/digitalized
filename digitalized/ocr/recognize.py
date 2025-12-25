@@ -2,7 +2,7 @@
 from __future__ import annotations
 from io import BytesIO
 from abc import abstractmethod, ABC
-from typing import Literal, Any, Callable
+from typing import Literal, Any, Callable, Union
 from dataclasses import dataclass
 from soup_files import File, Directory
 from pytesseract import pytesseract
@@ -14,6 +14,7 @@ from digitalized.types.array import ArrayList
 from digitalized.types.core import ObjectAdapter
 from digitalized.ocr.tesseract import BinTesseract, CheckTesseractSystem
 from digitalized.documents.image.image import ImageObject, LibImage
+from digitalized.documents.pdf.pdf_document import DocumentPdf, LibPDF, PageDocumentPdf
 from digitalized.documents.erros import NotImplementedModuleImageError
 from digitalized.ocr.error import (
     NotImplementedModuleTesseractError
@@ -65,7 +66,7 @@ def create_document_from_image(img: ImageObject) -> fitz.Document:
 
 def create_images_from_pdf(
             pdf_bytes: bytes, *,
-            dpi=300,
+            dpi=250,
             lib_image: LibImage = "pil",
         ) -> ArrayList[ImageObject]:
     _document = fitz.Document(stream=pdf_bytes, filetype="pdf")
@@ -78,43 +79,6 @@ def create_images_from_pdf(
         )
         images.append(img_obj)
     return images
-
-
-def merge_pdf_bytes(pdf_bytes_list: ArrayList[bytes]) -> fitz.Document:
-    """
-    Mescla uma lista de bytes de PDFs em um único objeto fitz.Document.
-    """
-    if pdf_bytes_list.size() == 0:
-        raise ValueError()
-
-    # Cria um documento novo e vazio
-    final_doc = fitz.open()
-    for pdf_bytes in pdf_bytes_list:
-        # Abre o PDF individual a partir dos bytes
-        # O parâmetro 'stream' recebe os bytes, e 'filetype' ajuda a identificar o formato
-        current_doc: fitz.Document = fitz.open(stream=pdf_bytes, filetype="pdf")
-        # Insere todas as páginas do documento atual no documento final
-        final_doc.insert_pdf(current_doc)
-        # Fecha o documento temporário para liberar memória
-        current_doc.close()
-    return final_doc
-
-
-def merge_pdf_fitz(pdf_documents: ArrayList[fitz.Document]) -> fitz.Document:
-    """
-    Mescla uma lista de bytes de PDFs em um único objeto fitz.Document.
-    """
-    if pdf_documents.size() == 0:
-        raise ValueError()
-
-    # Cria um documento novo e vazio
-    final_doc = fitz.open()
-    pdf_doc: fitz.Document
-    for pdf_doc in pdf_documents:
-        # Insere todas as páginas do documento atual no documento final
-        final_doc.insert_pdf(pdf_doc)
-        pdf_doc.close()
-    return final_doc
 
 
 # ======================================================================#
@@ -205,21 +169,26 @@ class TextRecognized(object):
     def get_bytes(self) -> bytes:
         return self.__bytes_recognized
 
-    def get_document(self) -> fitz.Document:
-        _doc = fitz.Document(stream=self.__bytes_recognized, filetype="pdf")
+    def get_document(self) -> DocumentPdf:
+        _doc = DocumentPdf.create_from_bytes(self.get_bytes())
+        #_doc = fitz.Document(stream=self.__bytes_recognized, filetype="pdf")
         return _doc
 
     def to_file_pdf(self, file_path: File) -> None:
-        self.get_document().save(file_path.absolute())
+        self.get_document().to_file(file_path)
 
     def get_text(self) -> str | None:
-        return self.get_document()[0].get_text()
+        return self.get_document().to_pages()[0].get_text()
 
 
 class InterfaceTesseractOcr(ABC):
 
     def __init__(self, **kwargs):
         self._bin_tess: BinTesseract = BinTesseract.builder().build()
+
+    @abstractmethod
+    def get_real_module(self) -> Any:
+        pass
 
     @abstractmethod
     def get_current_library(self) -> LibOcr:
@@ -254,6 +223,9 @@ class ImplementPyTesseract(InterfaceTesseractOcr):
     def __hash__(self) -> int:
         return hash(f'{self.get_bin_tess().__hash__()}pytesseract')
 
+    def get_real_module(self) -> Union[pytesseract]:
+        return self._mod_py_tesseract
+
     def get_current_library(self) -> LibOcr:
         return "pytesseract"
 
@@ -284,12 +256,15 @@ class ImplementPyTesseract(InterfaceTesseractOcr):
             )
 
         if self.get_bin_tess().get_lang() is None:
-            return self._mod_py_tesseract.image_to_string(_im, config=self.__get_tess_dir_config())
+            return self._mod_py_tesseract.image_to_string(
+                _im, config=self.__get_tess_dir_config(), timeout=15
+            )
         else:
             return self._mod_py_tesseract.image_to_string(
                 _im,
                 lang=self.get_bin_tess().get_lang(),
-                config=self.__get_tess_dir_config()
+                config=self.__get_tess_dir_config(),
+                timeout=15,
             )
 
     def get_recognized_text(self, img: ImageObject) -> TextRecognized:
@@ -307,6 +282,7 @@ class ImplementPyTesseract(InterfaceTesseractOcr):
             lang=self.get_bin_tess().get_lang(),
             config=self.__get_tess_dir_config(),
             extension='pdf',
+            timeout=15,
         )
         return TextRecognized(bt)
 
@@ -350,6 +326,9 @@ class ImplementEasyOcr(InterfaceTesseractOcr):
 
     def __hash__(self) -> int:
         return hash(f'{self.get_bin_tess().__hash__()}easyocr')
+
+    def get_real_module(self):
+        return self.reader
 
     def get_current_library(self) -> str:
         return 'easyocr'
@@ -418,6 +397,9 @@ class ImplementKerasOcr(InterfaceTesseractOcr):
     def __hash__(self) -> int:
         return hash(f'{self.get_bin_tess().__hash__()}kerasocr')
 
+    def get_real_module(self):
+        return self.pipeline
+
     def get_current_library(self) -> str:
         return 'kerasocr'
 
@@ -474,6 +456,9 @@ class TesseractOcr(ObjectAdapter):
     def hash(self) -> int:
         return self.__hash__()
 
+    def get_real_module(self) -> Union["pytesseract", "easyocr.Reader"]:
+        return self.get_implementation().get_real_module()
+
     def get_implementation(self) -> InterfaceTesseractOcr:
         return self.__implement_ocr
 
@@ -516,13 +501,18 @@ class RecognizePdf(object):
     def __init__(self, tess: TesseractOcr):
         self.tess: TesseractOcr = tess
 
-    def recognize_pdf(self, pdf_bytes: bytes, *, dpi: int = 300) -> fitz.Document:
-        doc_images: ArrayList[ImageObject] = create_images_from_pdf(pdf_bytes, dpi=dpi)
-        recognized_docs: ArrayList[fitz.Document] = ArrayList()
-        for im in doc_images:
+    def recognize_pdf(self, pdf_document: Union[bytes | DocumentPdf], *, dpi: int = 300) -> DocumentPdf:
+        if isinstance(pdf_document, DocumentPdf):
+            pdf_document = pdf_document.to_bytes()
+
+        doc_images: ArrayList[ImageObject] = create_images_from_pdf(pdf_document, dpi=dpi)
+        recognized_docs: ArrayList[PageDocumentPdf] = ArrayList()
+        for n, im in enumerate(doc_images):
+            print(f'OCR PDF {n}')
             txt = self.tess.get_recognized_text(im)
-            recognized_docs.append(txt.get_document())
-        return merge_pdf_fitz(recognized_docs)
+            recognized_docs.extend(txt.get_document().to_pages())
+        final_doc = DocumentPdf.create_from_pages(recognized_docs)
+        return final_doc
 
     @classmethod
     def crate(cls, lib_ocr: LibOcr = "pytesseract", **kwargs) -> RecognizePdf:
