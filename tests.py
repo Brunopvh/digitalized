@@ -9,17 +9,21 @@ MODULES_DIR = os.path.join(ROOT_DIR, 'sheet_stream')
 
 sys.path.insert(0, MODULES_DIR)
 
-from digitalized.documents.sheet import ReadSheetExcel, ReadSheetODS, ReadSheetCsv
-from digitalized.documents.sheet.parse import SplitDataFrame, ParserData, FilterData, SearchInData
-from digitalized.documents.image.image import LibImage, ImageObject
+from digitalized.documents.pdf.pdf_document import DocumentPdf
 import pandas as pd
 from soup_files import File, UserFileSystem, Directory, InputFiles
 
 output = UserFileSystem().userDownloads
 
+f = '/home/bruno/Documentos/OUTRO/2025-08 ORGANIZAÇÃO DE DOCUMENTOS DIGITALIZADOS COM O USO DA TECNOLOGIA OCR(1).pdf'
+
 
 def test():
-    from digitalized.documents.sheet import ReadSheetCsv
+
+    _imp = DocumentPdf.build_interface().set_lib("fitz").set_bytes(File(f).path.read_bytes()).create()
+    doc = DocumentPdf(_imp)
+    doc.set_land_scape()
+    doc.to_file(output.join_file('test.pdf'))
 
 
 def main():

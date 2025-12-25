@@ -5,14 +5,11 @@
 """
 from __future__ import annotations
 from abc import ABC, abstractmethod
-from typing import Any, Literal
+from typing import Any, Literal, Union
+
+from digitalized.documents.erros import NotImplementedModulePdfError
 from digitalized.types.array import ArrayString, BaseTableString
-from digitalized.types.core import ObjectAdapter
-from convert_stream.mod_types.modules import (
-    ModPagePdf, PageObject, fitz
-)
-from sheet_stream.type_utils import MetaDataFile
-from convert_stream.text.find_text import FindText, ArrayString
+from digitalized.types.core import ObjectAdapter, BuilderInterface
 
 #=================================================================#
 # Módulos para PDF fitz e pypdf
@@ -21,11 +18,11 @@ MODULE_FITZ = False
 MODULE_PYPDF = False
 
 try:
-    import fitz
+    import pymupdf as fitz
     MODULE_FITZ = True
 except ImportError:
     try:
-        import pymupdf as fitz
+        import fitz
         MODULE_FITZ = True
     except ImportError:
         pass
@@ -42,11 +39,15 @@ LibPDF = Literal["fitz", "pypdf"]
 
 class InterfacePagePdf(ABC):
 
-    def __init__(self):
+    def __init__(self, *args, **kwargs):
         self._num_page: int = None
 
     @abstractmethod
-    def get_real_page(self) -> PageObject | fitz.Page:
+    def hash(self) -> int:
+        pass
+
+    @abstractmethod
+    def get_real_module(self) -> Union[PageObject, fitz.Page]:
         pass
 
     @abstractmethod
@@ -89,14 +90,20 @@ class InterfacePagePdf(ABC):
         pass
 
 
-class ImplementPypdf(InterfacePagePdf):
+class ImplementPagePdfPypdf(InterfacePagePdf):
 
     def __init__(self, page_pdf: PageObject, num_page: int):
         super().__init__()
         self._page_pdf: PageObject = page_pdf
         self.set_num_page(num_page)
 
-    def get_real_page(self) -> PageObject:
+    def hash(self) -> int:
+        return self.__hash__()
+
+    def __hash__(self) -> int:
+        return hash(self.get_real_module())
+
+    def get_real_module(self) -> PageObject:
         return self._page_pdf
 
     def set_rotation(self, num: int):
@@ -153,18 +160,24 @@ class ImplementPypdf(InterfacePagePdf):
         return "pypdf"
 
     @classmethod
-    def create_from_pypdf(cls, page: PageObject, number: int) -> ImplementPypdf:
+    def create_from_pypdf(cls, page: PageObject, number: int) -> ImplementPagePdfPypdf:
         return cls(page, number)
 
 
-class ImplementFitz(InterfacePagePdf):
+class ImplementPagePdfFitz(InterfacePagePdf):
 
     def __init__(self, page_pdf: fitz.Page, page_number: int):
         super().__init__()
         self._page_pdf: fitz.Page = page_pdf
         self.set_num_page(page_number)
 
-    def get_real_page(self) -> fitz.Page:
+    def hash(self) -> int:
+        return self.__hash__()
+
+    def __hash__(self):
+        return hash(self.get_real_module())
+
+    def get_real_module(self) -> fitz.Page:
         return self._page_pdf
 
     def get_num_page(self) -> int:
@@ -236,14 +249,8 @@ class PageDocumentPdf(ObjectAdapter):
     def __eq__(self, other: PageDocumentPdf) -> bool:
         return self.__hash__() == other.__hash__()
 
-    def __hash__(self):
-        return hash(f'{self.get_num_page()}{self.get_text() or ""}')
-
     def get_implementation(self) -> InterfacePagePdf:
         return self._implement_page
-
-    def hash(self) -> int:
-        return self.__hash__()
 
     def get_num_page(self) -> int:
         return self._implement_page.get_num_page()
@@ -295,8 +302,45 @@ class PageDocumentPdf(ObjectAdapter):
 
     @classmethod
     def create_from_page_pypdf(cls, page: PageObject, number: int) -> PageDocumentPdf:
-        return cls(ImplementPypdf(page, number))
+        return cls(ImplementPagePdfPypdf(page, number))
 
     @classmethod
     def create_from_page_fitz(cls, page: fitz.Page, number: int) -> PageDocumentPdf:
-        return cls(ImplementFitz(page, number))
+        return cls(ImplementPagePdfFitz(page, number))
+
+    @classmethod
+    def build_interface(cls) -> BuilderInterfacePagePdf:
+        return BuilderInterfacePagePdf()
+
+
+class BuilderInterfacePagePdf(BuilderInterface):
+
+    def __init__(self):
+        self.__lib_pdf: LibPDF = "fitz"
+        self.__page: Union[PageObject, fitz.Page] = None
+        self.__num_page: int = None
+
+    def set_lib_pdf(self, lib_pdf: LibPDF) -> BuilderInterfacePagePdf:
+        self.__lib_pdf = lib_pdf
+        return self
+
+    def set_page(self, page: Union[PageObject, fitz.Page]) -> BuilderInterfacePagePdf:
+        self.__page = page
+        return self
+
+    def set_num_page(self, num_page: int) -> BuilderInterfacePagePdf:
+        self.__num_page = num_page
+        return self
+
+    def create(self) -> InterfacePagePdf:
+        if self.__page is None:
+            raise ValueError(f"{__class__.__name__} Necessário setar uma página pdf para prosseguir!")
+        if self.__num_page is None:
+            raise ValueError(f"{__class__.__name__} Necessário setar o número da página pdf para prosseguir!")
+
+        if self.__lib_pdf == "fitz":
+            return ImplementPagePdfFitz.create_from_fitz(self.__page, self.__num_page)
+        elif self.__lib_pdf == "pypdf":
+            return ImplementPagePdfFitz.create_from_fitz(self.__page, self.__num_page)
+        else:
+            raise NotImplementedModulePdfError()

@@ -9,11 +9,11 @@ from io import BytesIO
 from typing import Union, Any
 import pandas as pd
 from soup_files import File, Directory, LibraryDocs, InputFiles, ProgressBarAdapter, JsonConvert
-from digitalized.types.core import ObjectAdapter
+from digitalized.types.core import ObjectAdapter, BuilderInterface
 from digitalized.types.array import ArrayList, ArrayString
 from digitalized.documents.erros import NotImplementedModulePdfError
 from digitalized.documents.pdf.pdf_page import (
-    PageDocumentPdf, InterfacePagePdf, LibPDF, MODULE_FITZ, MODULE_PYPDF
+    PageDocumentPdf, InterfacePagePdf, LibPDF, MODULE_FITZ, MODULE_PYPDF, BuilderInterfacePagePdf
 )
 
 if MODULE_PYPDF:
@@ -21,12 +21,10 @@ if MODULE_PYPDF:
 if MODULE_FITZ:
     try:
         import fitz
-
         MODULE_FITZ = True
     except ImportError:
         try:
             import pymupdf as fitz
-
             MODULE_FITZ = True
         except ImportError:
             pass
@@ -43,7 +41,15 @@ class InterfaceDocumentPdf(ABC):
         pass
 
     @abstractmethod
-    def get_real_interface(self) -> fitz.Document | PdfReader:
+    def __hash__(self) -> int:
+        pass
+
+    @abstractmethod
+    def get_real_module(self) -> Union[fitz.Document | PdfReader]:
+        pass
+
+    @abstractmethod
+    def set_real_module(self, module: Union[fitz.Document, PdfReader]):
         pass
 
     @abstractmethod
@@ -108,7 +114,13 @@ class ImplementDocumentPdfFitz(InterfaceDocumentPdf):
         super().__init__()
         self.pdf_doc: fitz.Document = document
 
-    def get_real_interface(self) -> fitz.Document:
+    def __hash__(self) -> int:
+        return hash(self.pdf_doc)
+
+    def set_real_module(self, module: fitz.Document):
+        self.pdf_doc = module
+
+    def get_real_module(self) -> fitz.Document:
         return self.pdf_doc
 
     def get_current_library(self) -> LibPDF:
@@ -173,7 +185,7 @@ class ImplementDocumentPdfFitz(InterfaceDocumentPdf):
     def create_from_bytes(cls, bt: bytes) -> ImplementDocumentPdfFitz:
         # Cria documento a partir de BytesIO
         if not MODULE_FITZ:
-            raise ImportError("Módulo fitz|pymupdf não instalado!\nUse pip install fitz.")
+            raise ImportError("Módulo fitz|pymupdf não instalado! - Use pip install fitz.")
         doc: fitz.Document = fitz.Document(stream=bt, filetype="pdf")
         return cls(doc)
 
@@ -193,11 +205,11 @@ class ImplementDocumentPdfFitz(InterfaceDocumentPdf):
         pdf_document = fitz.Document()
         for page in pages:
             # Verifica se a página é do tipo fitz.Page
-            if not isinstance(page.get_implementation().get_real_page(), fitz.Page):
+            if not isinstance(page.get_implementation().get_real_module(), fitz.Page):
                 raise TypeError(f"Todas as páginas devem ser do tipo [fitz.Page]")
             # Insere as páginas no novo documento
             pdf_document.insert_pdf(
-                page.get_implementation().get_real_page().parent,
+                page.get_implementation().get_real_module().parent,
                 from_page=page.get_num_page(),
                 to_page=page.get_num_page()
             )
@@ -210,11 +222,17 @@ class ImplementDocumentPdfPyPdf(InterfaceDocumentPdf):
         Implementação usando a biblioteca pypdf
     """
 
-    def __init__(self, doc_pdf: PdfReader | PdfWriter):
+    def __init__(self, doc_pdf: PdfReader):
         super().__init__()
-        self.doc_pdf: PdfReader | PdfWriter = doc_pdf  # ou PdfReader
+        self.doc_pdf: PdfReader = doc_pdf  # ou PdfReader
 
-    def get_real_interface(self) -> PdfReader:
+    def __hash__(self) -> int:
+        return hash(self.doc_pdf)
+
+    def set_real_module(self, module: PdfReader):
+        self.doc_pdf = module
+
+    def get_real_module(self) -> PdfReader:
         return self.doc_pdf
 
     def merge_document(self, document: InterfaceDocumentPdf):
@@ -328,17 +346,21 @@ class DocumentPdf(ObjectAdapter):
         super().__init__()
         self._implement_interface_pdf: InterfaceDocumentPdf = implement_interface_pdf
 
-    def get_real_interface(self) -> fitz.Document | PdfReader:
-        return self.get_implementation().get_real_interface()
+    def set_land_scape(self) -> None:
+        pages = self.to_pages()
+        for n, p in enumerate(pages):
+            pages[n].set_land_scape()
 
-    def hash(self) -> int:
-        return self.__hash__()
-
-    def __hash__(self) -> int:
-        raise NotImplementedError()
+        if self.get_current_library() == "fitz":
+            self.set_implementation(ImplementDocumentPdfFitz.create_from_pages(pages))
+        elif self.get_current_library() == "pypdf":
+            self.set_implementation(ImplementDocumentPdfPyPdf.create_from_pages(pages))
 
     def get_implementation(self) -> InterfaceDocumentPdf:
         return self._implement_interface_pdf
+
+    def set_implementation(self, implementation: InterfaceDocumentPdf):
+        self._implement_interface_pdf = implementation
 
     def size(self) -> int:
         return self._implement_interface_pdf.size()
@@ -429,11 +451,11 @@ class DocumentPdf(ObjectAdapter):
             raise NotImplementedModulePdfError()
 
     @classmethod
-    def builder_interface(cls) -> BuilderInterfaceDocumentPdf:
-        return BuilderInterfaceDocumentPdf()
+    def build_interface(cls) -> BuilderInterfaceDocumentPdf:
+        return BuilderInterfaceDocumentPdf().set_lib("fitz")
 
 
-class BuilderInterfaceDocumentPdf(object):
+class BuilderInterfaceDocumentPdf(BuilderInterface):
 
     def __init__(self) -> None:
         self.__lib = "fitz"
@@ -447,9 +469,10 @@ class BuilderInterfaceDocumentPdf(object):
         self.__doc_bytes = document_bytes
         return self
 
-    def build(self) -> InterfaceDocumentPdf:
+    def create(self) -> InterfaceDocumentPdf:
         if self.__doc_bytes is None:
-            raise ValueError()
+            raise ValueError(f"{__class__.__name__} Necessário setar os bytes pdf para prosseguir!")
+
         if self.__lib == "fitz":
             return ImplementDocumentPdfFitz.create_from_bytes(self.__doc_bytes)
         elif self.__lib == "pypdf":
@@ -457,55 +480,3 @@ class BuilderInterfaceDocumentPdf(object):
         else:
             raise NotImplementedModulePdfError()
 
-
-class CollectionPagePdf(ArrayList):
-    """
-        Gerir uma coleção de páginas PDF.
-    """
-    def __init__(self, pages: list[PageDocumentPdf] = None) -> None:
-        if pages is None:
-            super().__init__(list())
-        else:
-            super().__init__(pages)
-        self.pbar: ProgressBarAdapter = ProgressBarAdapter()
-
-    def set_pbar(self, p: ProgressBarAdapter):
-        pass
-
-    def set_land_scape(self):
-        pass
-
-    def set_rotation(self, rotation: int) -> None:
-        pass
-
-    def add_page(self, page: PageDocumentPdf) -> None:
-        pass
-
-    def add_pages(self, pages: list[PageDocumentPdf]) -> None:
-        pass
-
-    def add_file_pdf(self, file: File, *, lib_pdf: LibPDF = LibPDF.FITZ) -> None:
-        pass
-
-    def add_files_pdf(self, files: list[File], lib_pdf: LibPDF = LibPDF.FITZ) -> None:
-        pass
-
-    def add_document(self, doc: DocumentPdf) -> None:
-        pass
-
-    def add_directory_pdf(self, d: Directory, *, max_files: int = 4000):
-        pass
-
-    def to_document(self, lib_pdf: LibPDF = "fitz") -> DocumentPdf:
-        pass
-
-    def to_file_pdf(self, file: File, *, replace: bool = False) -> None:
-        pass
-
-    def to_files_pdf(
-                self,
-                output_dir: Directory, *,
-                replace: bool = False,
-                prefix: str = None,
-            ) -> None:
-        pass

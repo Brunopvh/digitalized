@@ -7,8 +7,6 @@ scipy
 chardet
 pytesseract
 pypdf
+PyMuPDF
 #easyocr
-#keras-ocr
-#tensorflow
-
 
