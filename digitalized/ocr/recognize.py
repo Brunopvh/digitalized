@@ -508,7 +508,6 @@ class RecognizePdf(object):
         doc_images: ArrayList[ImageObject] = create_images_from_pdf(pdf_document, dpi=dpi)
         recognized_docs: ArrayList[PageDocumentPdf] = ArrayList()
         for n, im in enumerate(doc_images):
-            print(f'OCR PDF {n}')
             txt = self.tess.get_recognized_text(im)
             recognized_docs.extend(txt.get_document().to_pages())
         final_doc = DocumentPdf.create_from_pages(recognized_docs)

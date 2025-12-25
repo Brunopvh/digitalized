@@ -5,6 +5,8 @@ import os
 import fitz
 import soup_files as sp
 
+from digitalized.documents.pdf.pdf_page import PageDocumentPdf
+
 TEST_FILE = os.path.abspath(__file__)
 ROOT_DIR = os.path.dirname(TEST_FILE)
 MODULES_DIR = os.path.join(ROOT_DIR, 'sheet_stream')
@@ -15,19 +17,21 @@ sys.path.insert(0, MODULES_DIR)
 
 from digitalized.documents.pdf.pdf_document import DocumentPdf, merge_pdf_bytes
 from digitalized.ocr.recognize import RecognizePdf
+from digitalized.documents.image import ImageObject, ImageStream
 import pandas as pd
 
 
 def test():
 
-    _input_dir = sp.Directory('/mnt/dados/BACKUPS-PC/2025-09-23 MEU DRIVE/Documentos/60_DOCS DIVERSOS E COMPROVANTES/LAGOA AZUL/Lagoa azul contrato')
-    files = sp.InputFiles(_input_dir).pdfs
+    _input_dir = sp.Directory('/mnt/dados/ERO/2025-11-02 Cartas Toi WhatsApp/Output/GM E NM/OutputString')
+    files = sp.InputFiles(_input_dir).images[0:10]
 
-    rec = RecognizePdf.crate()
-    f = files[1]
-    print(f.basename())
-    doc = rec.recognize_pdf(DocumentPdf.create_from_file(f))
-    doc.to_file(output_dir.join_file("ocr.pdf"))
+    stream = ImageStream()
+    stream.add_files_image(files)
+    stream.set_landscape()
+    bt = stream.to_zip()
+    out = output_dir.join_file('commp.zip')
+    out.path.write_bytes(bt.getvalue())
 
 
 def main():

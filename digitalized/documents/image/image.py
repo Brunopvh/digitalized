@@ -2,15 +2,17 @@
 #
 from __future__ import annotations
 from abc import ABC, abstractmethod
-from typing import Tuple, Literal, Any
+from typing import Tuple, Literal, Any, Union
 from io import BytesIO
 from PIL import Image, ImageOps, ImageFilter
 from cv2.typing import MatLike
 import cv2
 import numpy as np
 from soup_files import File
-from digitalized.documents.erros import InvalidSourceImageError, NotImplementedInvertColor
-from digitalized.types.core import ObjectAdapter
+from digitalized.documents.erros import (
+    InvalidSourceImageError, NotImplementedInvertColor, NotImplementedModuleImageError
+)
+from digitalized.types.core import ObjectAdapter, BuilderInterface
 
 LibImage = Literal["opencv", "pil"]
 BackgroundColor = Literal["gray", "black"]
@@ -30,7 +32,7 @@ def image_opencv_to_bytes(img: cv2.typing.MatLike, image_extension: ImageExtensi
     return buffer.tobytes()  # Obtém os bytes da imagem
 
 
-class ABCInvertColor(ABC):
+class InterfaceInvertColor(ABC):
 
     @abstractmethod
     def get_lib_image(self) -> LibImage:
@@ -56,6 +58,10 @@ class ABCInvertColor(ABC):
     def set_gaussian_blur(self):
         pass
 
+    @abstractmethod
+    def get_real_module(self) -> Union[cv2.typing.MatLike, Image]:
+        pass
+
     def to_file(self, output_path: File):
         if self.get_lib_image() == "opencv":
             cv2.imwrite(
@@ -77,111 +83,10 @@ class ABCInvertColor(ABC):
         return image_bytes_to_opencv(self.get_image_bytes())
 
 
-class ABCImageObject(ABC):
-    """
-    Classe abstrata base para objetos de imagem.
-    """
-
-    def __init__(self, image_extension: ImageExtension = "png"):
-        self.__output_extension: ImageExtension = image_extension
-        self.__invert_color: ImageInvertColor = None
-
-    @abstractmethod
-    def get_width(self) -> int:
-        """Retorna a largura da imagem."""
-        pass
-
-    @abstractmethod
-    def get_height(self) -> int:
-        """Retorna a altura da imagem."""
-        pass
-
-    @abstractmethod
-    def set_image_bytes(self, img_bytes: bytes):
-        pass
-
-    @abstractmethod
-    def get_image_bytes(self) -> bytes:
-        pass
-
-    @abstractmethod
-    def get_current_library(self) -> LibImage:
-        pass
-
-    @abstractmethod
-    def set_optimize(self):
-        pass
-
-    @abstractmethod
-    def set_paisagem(self):
-        pass
-
-    @abstractmethod
-    def set_rotation(self, rotation: RotationAngle = 90):
-        pass
-
-    @abstractmethod
-    def set_background(self, color: BackgroundColor = "gray"):
-        pass
-
-    @abstractmethod
-    def set_gaussian(self):
-        pass
-
-    def get_invert_color(self) -> ImageInvertColor:
-        if self.__invert_color is None:
-            self.__invert_color = ImageInvertColor.create_from_bytes(
-                self.get_image_bytes(), library=self.get_current_library()
-            )
-        return self.__invert_color
-
-    def set_invert_color(self, invert: ImageInvertColor):
-        self.__invert_color = invert
-
-    @abstractmethod
-    def is_paisagem(self) -> bool:
-        """
-        Retorna True se a imagem estiver em modo paisagem.
-        """
-        pass
-
-    def is_gaussian(self) -> bool:
-        return self.get_invert_color().is_gaussian_blur()
-
-    def get_output_extension(self) -> ImageExtension:
-        return self.__output_extension
-
-    def set_output_extension(self, fmt: ImageExtension):
-        self.__output_extension = fmt
-
-    def to_image_pil(self) -> Image.Image:
-        return Image.open(BytesIO(self.get_image_bytes()))
-
-    def to_image_opencv(self) -> cv2.typing.MatLike:
-        # nparr = np.frombuffer(self.get_image_bytes(), np.uint8)
-        # return cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-        return image_bytes_to_opencv(self.get_image_bytes())
-
-    def to_bytes(self) -> bytes:
-        return self.get_image_bytes()
-
-    def to_file(self, filepath: File):
-        if self.get_current_library() == "pil":
-            try:
-                self.to_image_pil().save(filepath.absolute(), format=self.get_output_extension())
-            except Exception as e:
-                raise Exception(f"{__class__.__name__} Erro ao salvar imagem PIL: {e}")
-        elif self.get_current_library() == "opencv":
-            try:
-                cv2.imwrite(filepath.absolute(), self.to_image_opencv())
-            except Exception as e:
-                raise Exception(f"Erro ao salvar imagem OpenCV: {e}")
-
-
 # =============================================================================#
 # Inverter cores em imagens
 # =============================================================================#
-class ImplementInvertColorOpenCv(ABCInvertColor):
+class ImplementInvertColorOpenCv(InterfaceInvertColor):
     """
         Escurecer texto em imagens.
     """
@@ -194,6 +99,9 @@ class ImplementInvertColorOpenCv(ABCInvertColor):
             )
         self.__image_bytes: bytes = image_bytes
         self.__gaussian_blur: bool = False
+
+    def get_real_module(self) -> "cv2.typing.MatLike":
+        return image_bytes_to_opencv(self.get_image_bytes())
 
     def get_lib_image(self) -> LibImage:
         return "opencv"
@@ -256,7 +164,7 @@ class ImplementInvertColorOpenCv(ABCInvertColor):
         #self.__image_bytes = image_opencv_to_bytes(_result)
 
 
-class ImplementInvertColorPIL(ABCInvertColor):
+class ImplementInvertColorPIL(InterfaceInvertColor):
     """
         Implementação da inversão de cores usando PIL (Pillow).
     """
@@ -269,6 +177,9 @@ class ImplementInvertColorPIL(ABCInvertColor):
             )
         self.__img_bytes: bytes = image_bytes
         self.__gaussian_blur: bool = False
+
+    def get_real_module(self) -> "Image.Image":
+        return Image.open(BytesIO(self.get_image_bytes()))
 
     def get_lib_image(self) -> LibImage:
         return "pil"
@@ -334,11 +245,11 @@ class ImageInvertColor(ObjectAdapter):
         Escurecer texto em imagens.
     """
 
-    def __init__(self, invert_color: ABCInvertColor):
+    def __init__(self, invert_color: InterfaceInvertColor):
         super().__init__()
-        self._invert_color: ABCInvertColor = invert_color
+        self._invert_color: InterfaceInvertColor = invert_color
 
-    def get_implementation(self) -> ABCInvertColor:
+    def get_implementation(self) -> InterfaceInvertColor:
         return self._invert_color
 
     def hash(self) -> int:
@@ -375,9 +286,9 @@ class ImageInvertColor(ObjectAdapter):
             bt = file.read()
 
         if library == "opencv":
-            inv: ABCInvertColor = ImplementInvertColorOpenCv(bt)
+            inv: InterfaceInvertColor = ImplementInvertColorOpenCv(bt)
         elif library == "pil":
-            inv: ABCInvertColor = ImplementInvertColorPIL(bt)
+            inv: InterfaceInvertColor = ImplementInvertColorPIL(bt)
         else:
             raise NotImplementedInvertColor(
                 f'{__class__.__name__} Use: {LibImage}, não {type(library)}'
@@ -387,9 +298,9 @@ class ImageInvertColor(ObjectAdapter):
     @classmethod
     def create_from_bytes(cls, bt: bytes, *, library: LibImage = "opencv") -> 'ImageInvertColor':
         if library == "opencv":
-            invert_color: ABCInvertColor = ImplementInvertColorOpenCv(bt)
+            invert_color: InterfaceInvertColor = ImplementInvertColorOpenCv(bt)
         elif library == "pil":
-            invert_color: ABCInvertColor = ImplementInvertColorPIL(bt)
+            invert_color: InterfaceInvertColor = ImplementInvertColorPIL(bt)
         else:
             raise NotImplementedInvertColor(
                 f'{__class__.__name__} Use: {LibImage}, não {type(library)}'
@@ -400,7 +311,132 @@ class ImageInvertColor(ObjectAdapter):
 # =============================================================================#
 # Manipulação de imagens
 # =============================================================================#
-class ImageObjectPIL(ABCImageObject):
+
+
+class InterfaceImageObject(ABC):
+    """
+    Classe abstrata base para objetos de imagem.
+    """
+
+    def __init__(self):
+        self.__output_extension: ImageExtension = "png"
+        self.__invert_color: ImageInvertColor = None
+
+    def is_landscape(self) -> bool:
+        return self.get_width() > self.get_height()
+
+    def is_vertical(self) -> bool:
+        return self.get_height() > self.get_width()
+
+    @abstractmethod
+    def set_landscape(self):
+        pass
+
+    @abstractmethod
+    def set_vertical(self):
+        pass
+
+    @abstractmethod
+    def get_real_module(self) -> Union["Image.Image", "cv2.typing.MatLike"]:
+        pass
+
+    @abstractmethod
+    def get_width(self) -> int:
+        """Retorna a largura da imagem."""
+        pass
+
+    @abstractmethod
+    def get_height(self) -> int:
+        """Retorna a altura da imagem."""
+        pass
+
+    @abstractmethod
+    def set_image_bytes(self, img_bytes: bytes):
+        pass
+
+    @abstractmethod
+    def get_image_bytes(self) -> bytes:
+        pass
+
+    @abstractmethod
+    def get_current_library(self) -> LibImage:
+        pass
+
+    @abstractmethod
+    def set_optimize(self):
+        pass
+
+    @abstractmethod
+    def set_paisagem(self):
+        pass
+
+    @abstractmethod
+    def set_rotation(self, rotation: RotationAngle):
+        pass
+
+    @abstractmethod
+    def set_background(self, color: BackgroundColor = "gray"):
+        pass
+
+    @abstractmethod
+    def set_gaussian(self):
+        pass
+
+    def get_invert_color(self) -> ImageInvertColor:
+        if self.__invert_color is None:
+            self.__invert_color = ImageInvertColor.create_from_bytes(
+                self.get_image_bytes(), library=self.get_current_library()
+            )
+        return self.__invert_color
+
+    def set_invert_color(self, invert: ImageInvertColor):
+        self.__invert_color = invert
+
+    @abstractmethod
+    def is_paisagem(self) -> bool:
+        """
+        Retorna True se a imagem estiver em modo paisagem.
+        """
+        pass
+
+    def is_gaussian(self) -> bool:
+        return self.get_invert_color().is_gaussian_blur()
+
+    def get_output_extension(self) -> ImageExtension:
+        return self.__output_extension
+
+    def set_output_extension(self, fmt: ImageExtension):
+        self.__output_extension = fmt
+
+    def to_image_pil(self) -> Image.Image:
+        return Image.open(BytesIO(self.get_image_bytes()))
+
+    def to_image_opencv(self) -> cv2.typing.MatLike:
+        # nparr = np.frombuffer(self.get_image_bytes(), np.uint8)
+        # return cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        return image_bytes_to_opencv(self.get_image_bytes())
+
+    def to_bytes(self) -> bytes:
+        return self.get_image_bytes()
+
+    def to_file(self, filepath: File):
+        if self.get_current_library() == "pil":
+            try:
+                self.to_image_pil().save(filepath.absolute(), format=self.get_output_extension())
+            except Exception as e:
+                raise Exception(f"{__class__.__name__} Erro ao salvar imagem PIL: {e}")
+        elif self.get_current_library() == "opencv":
+            try:
+                cv2.imwrite(filepath.absolute(), self.to_image_opencv())
+            except Exception as e:
+                raise Exception(f"Erro ao salvar imagem OpenCV: {e}")
+
+    @classmethod
+    def builder(cls) -> BuilderInterface:
+        pass
+
+
+class ImageObjectPIL(InterfaceImageObject):
     """
         Implementação de ImageObject usando PIL.
     """
@@ -427,6 +463,17 @@ class ImageObjectPIL(ABCImageObject):
             buff_image.seek(0)
             buff_image.close()
         del img
+
+    def set_landscape(self):
+        if self.is_vertical():
+            self.set_rotation(90)
+
+    def set_vertical(self):
+        if self.is_landscape():
+            self.set_rotation(90)
+
+    def get_real_module(self) -> Union["Image.Image", "cv2.typing.MatLike"]:
+        return Image.open(BytesIO(self.get_image_bytes()))
 
     def get_width(self) -> int:
         return self.to_image_pil().width
@@ -470,7 +517,7 @@ class ImageObjectPIL(ABCImageObject):
         width, height = self.get_width(), self.get_height()
         return width > height
 
-    def set_rotation(self, rotation: RotationAngle = 90):
+    def set_rotation(self, rotation: RotationAngle):
         img = Image.open(BytesIO(self.__img_bytes))
         if rotation == 90:
             img = img.transpose(Image.Transpose.ROTATE_90)
@@ -507,7 +554,7 @@ class ImageObjectPIL(ABCImageObject):
         self.__img_bytes = inv.to_bytes()
 
 
-class ImageObjectOpenCV(ABCImageObject):
+class ImageObjectOpenCV(InterfaceImageObject):
     """
         Implementação de ImageObject usando OpenCV.
     """
@@ -538,6 +585,20 @@ class ImageObjectOpenCV(ABCImageObject):
         _, encoded_img = cv2.imencode('.png', image_opencv)
         self.__image_bytes = encoded_img.tobytes()
 
+    def set_landscape(self):
+        if self.is_vertical():
+            _module_image = cv2.rotate(
+                self.to_image_opencv(), cv2.ROTATE_90_COUNTERCLOCKWISE
+            )
+            self.set_image_bytes(image_opencv_to_bytes(_module_image))
+
+    def set_vertical(self):
+        if self.is_landscape():
+            self.set_rotation(90)
+
+    def get_real_module(self) -> "cv2.typing.MatLike":
+        return image_bytes_to_opencv(self.get_image_bytes())
+
     def get_width(self) -> int:
         return self.to_image_opencv().shape[1]
 
@@ -566,7 +627,7 @@ class ImageObjectOpenCV(ABCImageObject):
         width, height = self.get_width(), self.get_height()
         return width > height
 
-    def set_rotation(self, rotation: RotationAngle = 90):
+    def set_rotation(self, rotation: RotationAngle):
         nparr = np.frombuffer(self.__image_bytes, np.uint8)
         img: MatLike = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
         if rotation == 90:
@@ -621,15 +682,21 @@ class ImageObject(ObjectAdapter):
         Facade para manipular imagens com PIL ou OPENCV
     """
 
-    def __init__(self, img_obj: ABCImageObject):
+    def __init__(self, img_obj: InterfaceImageObject):
         super().__init__()
-        self.__implement_img: ABCImageObject = img_obj
+        self.__implement_img: InterfaceImageObject = img_obj
 
-    def get_implementation(self) -> ABCImageObject:
+    def set_landscape(self):
+        self.__implement_img.set_landscape()
+
+    def get_output_extension(self) -> ImageExtension:
+        return self.__implement_img.get_output_extension()
+
+    def get_implementation(self) -> InterfaceImageObject:
         return self.__implement_img
 
-    def hash(self) -> int:
-        return hash(self.__implement_img.get_image_bytes())
+    def get_real_module(self) -> Union["Image.Image", "cv2.typing.MatLike"]:
+        return self.get_implementation().get_real_module()
 
     def get_width(self) -> int:
         return self.__implement_img.get_width()
@@ -707,5 +774,43 @@ class ImageObject(ObjectAdapter):
         else:
             raise ValueError("Biblioteca de imagem inválida.")
         return cls(image)
+
+    @classmethod
+    def build(cls) -> BuilderInterfaceImage:
+        return BuilderInterfaceImage()
+
+
+class BuilderInterfaceImage(BuilderInterface):
+
+    def __init__(self):
+        super().__init__()
+        self.__lib_img: LibImage = "opencv"
+        self.__img_bytes: bytes = None
+
+    def set_lib_image(self, lib_image: LibImage) -> BuilderInterfaceImage:
+        self.__lib_img = lib_image
+        return self
+
+    def set_image_bytes(self, img_bytes: bytes) -> BuilderInterfaceImage:
+        self.__img_bytes = img_bytes
+        return self
+
+    def create(self) -> InterfaceImageObject:
+        if self.__img_bytes is None:
+            raise ValueError(f'{__class__.__name__} Bytes não pode ser None')
+
+        if self.__lib_img == "opencv":
+            return ImageObjectOpenCV(self.__img_bytes)
+        elif self.__lib_img == "pil":
+            return ImageObjectPIL(self.__img_bytes)
+        else:
+            raise NotImplementedModuleImageError()
+
+
+__all__ = [
+    'image_bytes_to_opencv', 'image_opencv_to_bytes',
+    'ImageObject', 'ImageInvertColor', 'BuilderInterfaceImage',
+    'LibImage'
+]
 
 
