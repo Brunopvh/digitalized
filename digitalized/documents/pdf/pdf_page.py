@@ -252,6 +252,9 @@ class PageDocumentPdf(ObjectAdapter):
     def get_implementation(self) -> InterfacePagePdf:
         return self._implement_page
 
+    def get_real_module(self) -> Union[fitz.Page, PageObject]:
+        return self._implement_page.get_real_module()
+
     def get_num_page(self) -> int:
         return self._implement_page.get_num_page()
 
@@ -344,3 +347,8 @@ class BuilderInterfacePagePdf(BuilderInterface):
             return ImplementPagePdfFitz.create_from_fitz(self.__page, self.__num_page)
         else:
             raise NotImplementedModulePdfError()
+
+
+__all__ = [
+    'MODULE_PYPDF', 'MODULE_FITZ', 'LibPDF', 'PageDocumentPdf', 'InterfacePagePdf'
+]

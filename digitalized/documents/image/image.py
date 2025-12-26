@@ -686,6 +686,9 @@ class ImageObject(ObjectAdapter):
         super().__init__()
         self.__implement_img: InterfaceImageObject = img_obj
 
+    def set_output_extension(self, fmt: ImageExtension):
+        self.__implement_img.set_output_extension(fmt)
+
     def set_landscape(self):
         self.__implement_img.set_landscape()
 
@@ -810,7 +813,7 @@ class BuilderInterfaceImage(BuilderInterface):
 __all__ = [
     'image_bytes_to_opencv', 'image_opencv_to_bytes',
     'ImageObject', 'ImageInvertColor', 'BuilderInterfaceImage',
-    'LibImage'
+    'LibImage', 'ImageExtension'
 ]
 
 

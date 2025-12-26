@@ -1,9 +1,9 @@
-from typing import Union
+from typing import Union, Callable, Any
 from io import BytesIO
 import zipfile
 from .image import (
     ImageObject, BuilderInterfaceImage, LibImage,
-    image_bytes_to_opencv, image_opencv_to_bytes
+    image_bytes_to_opencv, image_opencv_to_bytes, ImageExtension
 )
 from digitalized.types.array import ArrayList, T
 from soup_files import File, Directory, InputFiles
@@ -14,6 +14,9 @@ class ImageStream(ArrayList[ImageObject]):
     def __init__(self, items: list[ImageObject] = None, lib_image: LibImage = "opencv", **kwargs) -> None:
         super().__init__(items)
         self.__lib_img: LibImage = lib_image
+
+    def apply(self, func: Callable[[ImageObject], Any]) -> ArrayList[Any]:
+        return ArrayList([func(item) for item in self])
 
     def set_landscape(self):
         for num, img in enumerate(self):

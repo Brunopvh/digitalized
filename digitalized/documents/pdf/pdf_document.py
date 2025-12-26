@@ -8,13 +8,19 @@ from abc import ABC, abstractmethod
 from io import BytesIO
 from typing import Union, Any
 import pandas as pd
+import cv2
+from reportlab.pdfgen import canvas
+from reportlab.lib.utils import ImageReader
 from soup_files import File, Directory, LibraryDocs, InputFiles, ProgressBarAdapter, JsonConvert
 from digitalized.types.core import ObjectAdapter, BuilderInterface
 from digitalized.types.array import ArrayList, ArrayString
 from digitalized.documents.erros import NotImplementedModulePdfError
 from digitalized.documents.pdf.pdf_page import (
-    PageDocumentPdf, InterfacePagePdf, LibPDF, MODULE_FITZ, MODULE_PYPDF, BuilderInterfacePagePdf
+    PageDocumentPdf, InterfacePagePdf, LibPDF, MODULE_FITZ, MODULE_PYPDF
 )
+from digitalized.documents.image import ImageObject, ImageStream, LibImage
+from digitalized.io import ZipOutputStream
+
 
 if MODULE_PYPDF:
     from pypdf import PdfWriter, PdfReader, PageObject
@@ -32,7 +38,7 @@ if MODULE_FITZ:
 
 
 #======================================================================#
-# Funções para juntar/dividir documentos
+# Funções para juntar documentos
 #======================================================================#
 def merge_pdf_bytes(
             pdf_bytes_list: list[bytes], *,
@@ -114,6 +120,58 @@ def merge_pages_documents(
         raise NotImplementedModulePdfError()
 
 
+#======================================================================#
+# Função para converter imagem em documento PDF.
+#======================================================================#
+def create_document_from_image(img: ImageObject) -> fitz.Document:
+    """Converte imagem em documento PDF"""
+    # Converter o objeto de entrada para imagem OpenCV
+    img_h, img_w = img.get_height(), img.get_width()
+
+    # Converter a imagem para PDF (imagem de fundo)
+    buffer = BytesIO()
+    pdf = canvas.Canvas(buffer, pagesize=(img_w, img_h))
+
+    # Desenha a imagem original como fundo
+    success, encoded_image = cv2.imencode('.png', img.to_image_opencv())
+    img_stream = BytesIO(encoded_image.tobytes())
+    pdf.drawImage(ImageReader(img_stream), 0, 0, width=img_w, height=img_h)
+
+    # Adiciona o texto OCR como camada "invisível" sobre a imagem
+    pdf.setFont("Helvetica", 8)
+    pdf.setFillColorRGB(1, 1, 1, alpha=0)  # texto invisível
+    pdf.showPage()
+    pdf.save()
+    buffer.seek(0)
+    final_bytes: bytes = buffer.read()
+    buffer.close()
+    return fitz.Document(stream=final_bytes, filetype="pdf")
+
+
+#======================================================================#
+# Função para converter documentos em imagens
+#======================================================================#
+def create_images_from_pdf(
+            pdf_bytes: bytes, *,
+            dpi=250,
+            lib_image: LibImage = "pil",
+        ) -> ImageStream:
+    """
+    Converte as páginas de um documento PDF em imagens.
+    """
+    _document = fitz.Document(stream=pdf_bytes, filetype="pdf")
+    _stream = ImageStream()
+    page: fitz.Page
+    for page in _document:
+        pix: fitz.Pixmap = page.get_pixmap(dpi=dpi)
+        img_obj = ImageObject.create_from_bytes(
+            pix.tobytes('png', jpg_quality=100),
+            library=lib_image
+        )
+        _stream.add_image(img_obj)
+    return _stream
+
+
 class InterfaceDocumentPdf(ABC):
     """
         Classe molde para gerir os documentos, para operações como:
@@ -174,6 +232,12 @@ class InterfaceDocumentPdf(ABC):
     @abstractmethod
     def to_file(self, file: File):
         pass
+
+    def to_zip(self, prefix: str = "document") -> BytesIO:
+        zip_stream = ZipOutputStream('pdf')
+        return zip_stream.save_zip(
+            [self.to_bytes()], prefix=prefix,
+        )
 
     @abstractmethod
     def to_bytes(self) -> bytes:
@@ -576,3 +640,9 @@ class BuilderInterfaceDocumentPdf(BuilderInterface):
         else:
             raise NotImplementedModulePdfError()
 
+
+__all__ = [
+    'DocumentPdf', 'BuilderInterfaceDocumentPdf',
+    'InterfaceDocumentPdf', 'merge_documents',
+    'merge_pdf_bytes', 'merge_pages_documents',
+]

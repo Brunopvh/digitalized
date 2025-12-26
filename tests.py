@@ -15,23 +15,22 @@ output_dir = sp.UserFileSystem().userDownloads.concat('output', create=True)
 
 sys.path.insert(0, MODULES_DIR)
 
-from digitalized.documents.pdf.pdf_document import DocumentPdf, merge_pdf_bytes
-from digitalized.ocr.recognize import RecognizePdf
+from digitalized.documents.pdf import DocumentPdf, ConvertImageToPdf, ConvertPdfToImages
 from digitalized.documents.image import ImageObject, ImageStream
-import pandas as pd
-
 
 def test():
 
     _input_dir = sp.Directory('/mnt/dados/ERO/2025-11-02 Cartas Toi WhatsApp/Output/GM E NM/OutputString')
     files = sp.InputFiles(_input_dir).images[0:10]
+    img_stream = ImageStream()
+    img_stream.add_files_image(files)
 
-    stream = ImageStream()
-    stream.add_files_image(files)
-    stream.set_landscape()
-    bt = stream.to_zip()
-    out = output_dir.join_file('commp.zip')
-    out.path.write_bytes(bt.getvalue())
+    images_zip = output_dir.join_file('images.zip')
+    f = '/home/brunoc/Downloads/output/teste/imagem_para_pdf-1.pdf'
+
+    conv = ConvertPdfToImages.create_from_document(DocumentPdf.create_from_file(sp.File(f)))
+    final_zip = conv.to_zip_bytes()
+    images_zip.path.write_bytes(final_zip.getvalue())
 
 
 def main():
