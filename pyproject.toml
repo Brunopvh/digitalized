@@ -20,6 +20,14 @@ dependencies = [
     "odfpy",
     "pandas",
     "requests>=2.32.4",
+    "numpy",
+    "scipy",
+    "chardet",
+    "pytesseract",
+    "pypdf",
+    "PyMuPDF",
+    "reportlab",
+    "opencv-python",
 ]
 
 [tool.setuptools]
