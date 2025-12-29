@@ -3,39 +3,34 @@ requires = ["setuptools>=61.0.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "sheet_stream"
-version = "0.1.3"
+name = "app_variacao"
+version = "0.1.0"
 authors = [
   { name="Bruno Chaves"},
 ]
 
-description = "Leitura de dados em planilhas .csv/.ods/.xlsx"
+description = "Variação de Leitura"
 readme = "README.md"
 requires-python = ">=3.11"
 
 dependencies = [
     "soup_files>=1.4.1",
-    "scipy",
-    "openpyxl",
-    "odfpy",
     "pandas",
-    "requests>=2.32.4",
-    "numpy",
-    "scipy",
-    "chardet",
-    "pytesseract",
-    "pypdf",
-    "PyMuPDF",
-    "reportlab",
-    "opencv-python",
 ]
 
 [tool.setuptools]
 packages = [
-    "sheet_stream",
-    "sheet_stream.sheets",
-    "sheet_stream.erros",
-    "sheet_stream.text",
-    "sheet_stream.type_utils",
-    "sheet_stream.utils",
+    "app_variacao",
+    "app_variacao.documents",
+    "app_variacao.documents.erros",
+    "app_variacao.documents.sheet.csv",
+    "app_variacao.documents.sheet.excel",
+    "app_variacao.documents.sheet.ods",
+    "app_variacao.documents.sheet.types",
+    "app_variacao.documents.sheet.xml",
+    "app_variacao.io",
+    "app_variacao.types",
+    "app_variacao.util",
+    "app_variacao.ui",
+    "app_variacao.ui.core",
 ]

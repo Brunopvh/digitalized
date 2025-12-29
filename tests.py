@@ -5,28 +5,17 @@ import soup_files as sp
 
 TEST_FILE = os.path.abspath(__file__)
 ROOT_DIR = os.path.dirname(TEST_FILE)
-MODULES_DIR = os.path.join(ROOT_DIR, 'sheet_stream')
+MODULES_DIR = os.path.join(ROOT_DIR, 'digitalized')
 
 output_dir = sp.UserFileSystem().userDownloads.concat('output', create=True)
 sys.path.insert(0, MODULES_DIR)
 
 
 def test():
-    from digitalized.ui_core.core.__init__ import (
-        BasePage, NotifyWidget, MyApp, run_app
-    )
+    from app_variacao.ui.core import run_app, MyApp
 
     app = MyApp()
-    page = BasePage(app)
-    page.set_page_name('HOME')
-    page.set_page_route('/home')
-    app.add_page(page)
-    app.navigator.push(page.get_page_route())
-
-    _notif = NotifyWidget()
-    page.subscribe(_notif)
-    _notif.send_notify()
-    app.get_window().mainloop()
+    run_app(app)
 
 
 def main():

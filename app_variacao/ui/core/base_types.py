@@ -5,17 +5,42 @@ from typing import Any, Generic, TypeVar
 
 T = TypeVar('T')
 
+
 #=================================================================#
 # Notificadores e observadores
 #=================================================================#
-
-class MessageNotification(dict[str, T], Generic[T]):
+class CoreDict(dict[str, T], Generic[T]):
 
     def __init__(self, values: dict = None) -> None:
         if values is None:
             super().__init__({})
         else:
             super().__init__(values)
+
+    def __repr__(self):
+        return f'{self.__class__.__name__}()\n{super().__repr__()}\n'
+
+    def get_first(self) -> T:
+        _k = self.keys()[0]
+        return self[_k]
+
+    def set_first(self, value: T) -> None:
+        self[self.keys()[0]] = value
+
+    def get_last(self) -> T:
+        return self[self.keys()[-1]]
+
+    def set_last(self, value: T) -> None:
+        self[self.keys()[-1]] = value
+
+    def keys(self) -> list[str]:
+        return list(super().keys())
+
+
+class MessageNotification(CoreDict):
+
+    def __init__(self, values: dict[str, T] = None) -> None:
+        super().__init__(values)
 
     def __repr__(self):
         return f'{self.__class__.__name__}(\n{super().__repr__()}\n)'

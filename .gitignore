@@ -1,0 +1,11 @@
+app_variacao/__pycache__/
+app_variacao/io/__pycache__/
+app_variacao/types/__pycache__/
+app_variacao/util/__pycache__/
+app_variacao/documents/__pycache__/
+app_variacao/documents/sheet/__pycache__/
+app_variacao/documents/erros/__pycache__/
+app_variacao/documents/sheet/csv/__pycache__/
+app_variacao/documents/sheet/ods/__pycache__/
+app_variacao/documents/sheet/types/__pycache__/
+app_variacao/documents/sheet/xml/__pycache__/

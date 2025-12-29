@@ -1,14 +1,2 @@
-numpy<2.0.0
-odfpy
-openpyxl
 pandas
 soup_files>=1.4
-scipy
-chardet
-pytesseract
-pypdf
-PyMuPDF
-reportlab
-opencv-python
-#easyocr
-

@@ -5,7 +5,7 @@ from enum import StrEnum
 from tkinter import ttk, Tk
 from typing import Any, Callable, Literal, TypeVar, TypedDict, Generic
 from tkinter import (ttk, Tk, messagebox)
-from digitalized.ui_core.core.base_types import (
+from app_variacao.ui.core.base_types import (
     AbstractObserver, AbstractNotifyProvider,
     MessageNotification, T, CoreDict
 )
